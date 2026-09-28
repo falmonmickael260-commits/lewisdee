@@ -5,6 +5,10 @@
   "type": "module",
   "description": "Jeu de dés 10 000 — moteur + interface web premium",
   "scripts": {
+    "start": "node server.js",
     "test": "node tests/engine.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
