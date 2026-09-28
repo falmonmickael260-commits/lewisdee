@@ -13,10 +13,10 @@ import { WebSocketServer } from 'ws';
 import { RoomManager } from './net/rooms.js';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
-// 8743 par défaut pour coller au port utilisé par l'aperçu local de ce
+// 8744 par défaut pour coller au port utilisé par l'aperçu local de ce
 // projet ; Railway (et tout hébergeur sérieux) fournit de toute façon sa
 // propre variable PORT, qui prime toujours sur ce repli.
-const PORT = process.env.PORT || 8743;
+const PORT = process.env.PORT || 8744;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -58,7 +58,10 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, {
       'Content-Type': type,
       'Content-Length': body.length,
-      'Cache-Control': path === '/index.html' ? 'no-cache' : 'public, max-age=3600',
+      // "no-cache" (et non "no-store") : le navigateur garde une copie mais
+      // revalide toujours avant de l'utiliser — pas de risque de servir du
+      // JS/CSS périmé après une mise à jour, sans perdre le bénéfice du cache.
+      'Cache-Control': 'no-cache',
     });
     res.end(body);
   } catch (err) {

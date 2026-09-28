@@ -93,14 +93,14 @@ export function randomFinalRotation() {
 
 /** Nombre de tours complets aléatoire pendant le vol, pour varier l'animation. */
 export function randomSpin() {
-  return 360 * (3 + Math.floor(Math.random() * 4)) + Math.floor(Math.random() * 360);
+  return 360 * (2 + Math.floor(Math.random() * 3)) + Math.floor(Math.random() * 360);
 }
 
 /**
- * Durée aléatoire d'un lancer (ms). Volontairement plus ample que le strict
- * minimum pour que le mouvement des dés soit clairement perceptible (chaque
- * dé a sa propre vitesse), tout en restant vif pour ne pas ralentir le jeu.
+ * Durée aléatoire d'un lancer (ms) : assez court pour rester crédible (un
+ * vrai jet de dés à la main dure moins d'une seconde), tout en gardant
+ * chaque dé à sa propre vitesse.
  */
 export function randomThrowDuration() {
-  return 900 + Math.random() * 550;
+  return 620 + Math.random() * 320;
 }

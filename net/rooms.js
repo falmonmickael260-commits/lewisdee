@@ -29,9 +29,8 @@ function snapshot(controller) {
     turnScore: controller.turnScore,
     tableDice: controller.tableDice,
     committedDice: controller.committedDice,
-    currentCombos: controller.currentCombos,
+    hintCombos: controller.hintCombos,
     isBust: controller.isBust,
-    usesAllDice: controller.usesAllDice,
     gameOver: controller.gameOver,
     winner: controller.winner,
   };
@@ -102,7 +101,7 @@ class Room {
     if (this.controller.currentPlayerIndex !== memberId) return; // pas le tour de ce joueur
     switch (msg.action) {
       case 'roll': this.controller.roll(); break;
-      case 'toggle': this.controller.toggleCombo(msg.comboId); break;
+      case 'toggleDie': this.controller.toggleDie(msg.dieId); break;
       case 'reroll': this.controller.reroll(); break;
       case 'bank': this.controller.bankScore(); break;
       default: break;

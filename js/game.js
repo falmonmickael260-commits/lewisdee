@@ -6,9 +6,19 @@
  * (`on(event, handler)` / `emit`). Il ne touche jamais au DOM : la couche
  * UI (ui.js) s'abonne à ses événements pour animer/afficher.
  *
+ * Sélection : le joueur choisit lui-même, dé par dé, lesquels il garde
+ * (toggleDie). Le score de la sélection en cours est recalculé à chaque
+ * changement en ré-analysant EXACTEMENT les dés actuellement sélectionnés
+ * avec detectCombinations — le même moteur générique qui sert à détecter
+ * les combinaisons du lancer complet. Un dé peut donc être sélectionné même
+ * s'il ne rapporte rien seul ; tant que la sélection entière ne forme pas
+ * une combinaison valable (aucun dé "mort" dedans), elle vaut 0 point et ne
+ * peut pas être sécurisée ni relancée — ça force à composer une vraie
+ * combinaison, tout en laissant le joueur entièrement libre de son choix.
+ *
  * Cette séparation permet, plus tard, de remplacer ce contrôleur local par
- * un client qui reçoit les mêmes événements depuis un serveur Supabase
- * Realtime (voir net/ pour les stubs prévus à cet effet).
+ * un client qui reçoit les mêmes événements depuis un serveur (voir net/
+ * pour l'implémentation multijoueur en ligne).
  */
 
 import {
@@ -32,11 +42,10 @@ export class GameController {
     }));
     this.currentPlayerIndex = 0;
     this.turnScore = 0; // points sécurisés pendant le tour en cours (legs précédents)
-    this.pendingScore = 0; // points du leg en cours, pas encore verrouillés
-    this.committedDice = []; // dés déjà verrouillés ce tour: {id, value, x, y, rotation}
-    this.tableDice = []; // dés du leg courant: {id, value, x, y, rotation, state, comboId}
-    this.currentCombos = [];
-    this.listeners = {};
+    this.committedDice = []; // dés déjà verrouillés ce tour: {id, value, x, y}
+    this.tableDice = []; // dés du leg courant: {id, value, x, y, state, selected}
+    this.hintCombos = []; // combinaisons détectées dans le lancer complet (indicatif, pour la bannière)
+    this.isBust = false;
     this.gameOver = false;
     this.winner = null;
     // Contrôleur local : c'est LUI l'autorité, donc il enchaîne bien lui-même
@@ -44,6 +53,7 @@ export class GameController {
     // l'événement 'readyToReroll'). Le RemoteController (js/net.js) met ce
     // drapeau à false car c'est alors le serveur qui enchaîne.
     this.autoChainsReroll = true;
+    this.listeners = {};
   }
 
   on(event, handler) {
@@ -75,29 +85,27 @@ export class GameController {
       x: positions[i].x,
       y: positions[i].y,
       state: 'rolling',
-      comboId: null,
+      selected: false,
     }));
 
+    // Détection sur le lancer COMPLET : sert uniquement à (a) déterminer le
+    // bust et (b) donner une indication visuelle ("scorable" / "dead") pour
+    // guider le joueur — elle ne restreint plus ce qu'il peut sélectionner.
     const detection = detectCombinations(rolled);
-    this.currentCombos = detection.combos.map((c, i) => ({ ...c, comboId: `c${i}`, selected: false }));
-    this.deadIds = detection.deadIds;
+    this.hintCombos = detection.combos;
     this.isBust = detection.isBust;
-    this.usesAllDice = detection.usesAllDice;
 
-    // Associe chaque dé de la table à sa combo (ou 'dead')
+    const scorableIds = new Set(detection.combos.flatMap((c) => c.dieIds));
     this.tableDice.forEach((d) => {
-      const combo = this.currentCombos.find((c) => c.dieIds.includes(d.id));
-      d.comboId = combo ? combo.comboId : null;
-      d.state = combo ? 'scorable' : 'dead';
+      d.state = scorableIds.has(d.id) ? 'scorable' : 'dead';
     });
 
     this.emit('rolled', {
       dice: this.tableDice,
       committedDice: this.committedDice,
-      combos: this.currentCombos,
+      combos: this.hintCombos,
       isBust: this.isBust,
       isFirstRollOfTurn: this.committedDice.length === 0 && this.turnScore === 0,
-      usesAllDice: this.usesAllDice,
     });
 
     if (this.isBust) {
@@ -105,22 +113,32 @@ export class GameController {
     }
   }
 
-  /** Sélectionne/désélectionne une combinaison entière (tap sur un dé qui la compose). */
-  toggleCombo(comboId) {
-    const combo = this.currentCombos.find((c) => c.comboId === comboId);
-    if (!combo) return;
-    combo.selected = !combo.selected;
-    this.tableDice.forEach((d) => {
-      if (d.comboId === comboId) d.state = combo.selected ? 'selected' : 'scorable';
-    });
+  /** Sélectionne/désélectionne UN dé précis — le joueur compose lui-même sa combinaison. */
+  toggleDie(dieId) {
+    const die = this.tableDice.find((d) => d.id === dieId);
+    if (!die) return;
+    die.selected = !die.selected;
     this.emit('selectionChanged', {
-      combos: this.currentCombos,
+      tableDice: this.tableDice,
       pendingPoints: this._selectedPoints(),
     });
   }
 
+  /** Analyse la sélection ACTUELLE des dés (n'importe lesquels, choisis par le joueur). */
+  _selectionDetection() {
+    const selected = this.tableDice.filter((d) => d.selected).map((d) => ({ id: d.id, value: d.value }));
+    return detectCombinations(selected);
+  }
+
+  /**
+   * Points de la sélection en cours. 0 si rien n'est sélectionné, si la
+   * sélection ne forme aucune combinaison, ou si elle contient un dé qui ne
+   * participe à aucune combinaison valable (sélection "impure").
+   */
   _selectedPoints() {
-    return calculateScore(this.currentCombos.filter((c) => c.selected));
+    const det = this._selectionDetection();
+    if (det.combos.length === 0 || det.deadIds.length > 0) return 0;
+    return calculateScore(det.combos);
   }
 
   get canAct() {
@@ -148,26 +166,29 @@ export class GameController {
     this._endTurn();
   }
 
-  /** Relance : verrouille les combos sélectionnés, relance le reste (ou les 5 si dés chauds). */
+  /** Relance : verrouille les dés sélectionnés, relance le reste (ou les 5 si dés chauds). */
   reroll() {
     if (!this.canAct) return;
-    const selectedCombos = this.currentCombos.filter((c) => c.selected);
-    this.pendingScore = calculateScore(selectedCombos);
-    this.turnScore += this.pendingScore;
+    const gainedThisLeg = this._selectedPoints();
+    this.turnScore += gainedThisLeg;
 
-    const hotDice = this.usesAllDice; // tous les dés du leg ont scoré → on récupère les 5 dés
+    const selectedCount = this.tableDice.filter((d) => d.selected).length;
+    // "Dés chauds" : le joueur a choisi de garder LITTÉRALEMENT tous les dés
+    // de ce lancer, et canAct garantissait déjà que c'est une sélection
+    // propre (aucun dé mort dedans) — il récupère donc 5 dés neufs.
+    const hotDice = selectedCount === this.tableDice.length;
+
     if (hotDice) {
       this.committedDice = [];
       this.emit('hotDice', { turnScore: this.turnScore });
     } else {
-      // Les dés sélectionnés rejoignent les dés déjà verrouillés (figés à leur position)
-      const lockedNow = this.tableDice.filter((d) => d.state === 'selected');
+      const lockedNow = this.tableDice.filter((d) => d.selected);
       this.committedDice = [...this.committedDice, ...lockedNow];
       this.emit('diceLocked', { committedDice: this.committedDice, turnScore: this.turnScore });
     }
 
-    this.currentCombos = [];
     this.tableDice = [];
+    this.hintCombos = [];
     // Le prochain roll() recalculera automatiquement le bon nombre de dés disponibles.
     this.emit('readyToReroll', { turnScore: this.turnScore, diceRemaining: hotDice ? 5 : 5 - this.committedDice.length });
   }
@@ -184,10 +205,9 @@ export class GameController {
 
   _endTurn() {
     this.turnScore = 0;
-    this.pendingScore = 0;
     this.committedDice = [];
     this.tableDice = [];
-    this.currentCombos = [];
+    this.hintCombos = [];
     this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
     this.emit('turnChanged', { player: this.currentPlayer, players: this.players });
   }

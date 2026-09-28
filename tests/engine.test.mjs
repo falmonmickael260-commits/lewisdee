@@ -109,34 +109,50 @@ test('Test 6 — Cinq dés identiques (toutes les valeurs)', () => {
   }
 });
 
-// --- Test 7 : sélection des dés (verrouillage via GameController) -----------
-test('Test 7 — Sélection des dés => statut verrouillé', () => {
+// --- Test 7 : sélection LIBRE dé par dé => statut verrouillé ----------------
+test('Test 7 — Sélection libre : cliquer un dé le sélectionne individuellement', () => {
   const g = new GameController(['A', 'B']);
   g.tableDice = [
-    { id: 'a', value: 3, x: 0, y: 0, state: 'scorable', comboId: 'c0' },
-    { id: 'b', value: 3, x: 0, y: 0, state: 'scorable', comboId: 'c0' },
-    { id: 'c', value: 3, x: 0, y: 0, state: 'scorable', comboId: 'c0' },
-    { id: 'd', value: 2, x: 0, y: 0, state: 'dead', comboId: null },
-    { id: 'e', value: 6, x: 0, y: 0, state: 'dead', comboId: null },
+    { id: 'a', value: 3, x: 0, y: 0, state: 'scorable', selected: false },
+    { id: 'b', value: 3, x: 0, y: 0, state: 'scorable', selected: false },
+    { id: 'c', value: 3, x: 0, y: 0, state: 'scorable', selected: false },
+    { id: 'd', value: 2, x: 0, y: 0, state: 'dead', selected: false },
+    { id: 'e', value: 6, x: 0, y: 0, state: 'dead', selected: false },
   ];
-  g.currentCombos = [{ comboId: 'c0', type: 'brelan', dieIds: ['a', 'b', 'c'], points: 300, selected: false }];
-  g.toggleCombo('c0');
-  assert.equal(g.currentCombos[0].selected, true);
-  assert.ok(g.tableDice.filter((d) => d.comboId === 'c0').every((d) => d.state === 'selected'));
+  g.toggleDie('a');
+  g.toggleDie('b');
+  g.toggleDie('c');
+  assert.ok(g.tableDice.filter((d) => ['a', 'b', 'c'].includes(d.id)).every((d) => d.selected === true));
+  assert.equal(g.canAct, true); // 3 mêmes valeurs sélectionnées = brelan valide
+  assert.equal(g._selectedPoints(), 300);
+});
+
+test('Test 7bis — Sélectionner un dé "mort" ne rapporte rien tant que ce n\'est pas une combinaison', () => {
+  const g = new GameController(['A', 'B']);
+  g.tableDice = [
+    { id: 'a', value: 3, x: 0, y: 0, state: 'scorable', selected: false },
+    { id: 'b', value: 3, x: 0, y: 0, state: 'scorable', selected: false },
+    { id: 'c', value: 3, x: 0, y: 0, state: 'scorable', selected: false },
+    { id: 'd', value: 2, x: 0, y: 0, state: 'dead', selected: false },
+  ];
+  g.toggleDie('a');
+  g.toggleDie('b');
+  g.toggleDie('c');
+  g.toggleDie('d'); // le joueur choisit AUSSI un dé mort : sélection "impure"
+  assert.equal(g.canAct, false);
+  assert.equal(g._selectedPoints(), 0);
 });
 
 // --- Test 8 : relance => seuls les dés non conservés bougent ----------------
 test('Test 8 — Relance : les dés conservés restent, seuls les autres sont relancés', () => {
   const g = new GameController(['A', 'B']);
   g.tableDice = [
-    { id: 'a', value: 3, x: 100, y: 100, state: 'selected', comboId: 'c0' },
-    { id: 'b', value: 3, x: 120, y: 100, state: 'selected', comboId: 'c0' },
-    { id: 'c', value: 3, x: 140, y: 100, state: 'selected', comboId: 'c0' },
-    { id: 'd', value: 2, x: 200, y: 200, state: 'dead', comboId: null },
-    { id: 'e', value: 6, x: 220, y: 220, state: 'dead', comboId: null },
+    { id: 'a', value: 3, x: 100, y: 100, state: 'scorable', selected: true },
+    { id: 'b', value: 3, x: 120, y: 100, state: 'scorable', selected: true },
+    { id: 'c', value: 3, x: 140, y: 100, state: 'scorable', selected: true },
+    { id: 'd', value: 2, x: 200, y: 200, state: 'dead', selected: false },
+    { id: 'e', value: 6, x: 220, y: 220, state: 'dead', selected: false },
   ];
-  g.currentCombos = [{ comboId: 'c0', type: 'brelan', dieIds: ['a', 'b', 'c'], points: 300, selected: true }];
-  g.usesAllDice = false;
   g.reroll();
   assert.equal(g.turnScore, 300);
   assert.equal(g.committedDice.length, 3);
@@ -155,7 +171,6 @@ test('Test 9 — Relance sans combinaison => perte des points du tour', () => {
   g.on('bust', (e) => (bustEvent = e));
   let turnChanged = null;
   g.on('turnChanged', (e) => (turnChanged = e));
-  g.currentCombos = [];
   g.tableDice = [];
   g.isBust = true;
   g._loseTurn();
@@ -169,7 +184,11 @@ test('Test 9 — Relance sans combinaison => perte des points du tour', () => {
 test('Test 10 — Sécurisation : les points sont ajoutés au score du joueur', () => {
   const g = new GameController(['A', 'B']);
   g.turnScore = 200;
-  g.currentCombos = [{ comboId: 'c0', type: 'brelan', dieIds: ['a', 'b', 'c'], points: 300, selected: true }];
+  g.tableDice = [
+    { id: 'a', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'b', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'c', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
+  ];
   g.bankScore();
   assert.equal(g.players[0].score, 500);
 });
@@ -177,11 +196,10 @@ test('Test 10 — Sécurisation : les points sont ajoutés au score du joueur', 
 // --- Test 11 : les 5 dés utilisés => relance des 5 dés possible -------------
 test('Test 11 — 5 dés utilisés (suite) => dés chauds, relance de 5 dés neufs', () => {
   const g = new GameController(['A', 'B']);
-  const { combos, usesAllDice } = detectCombinations(dice([1, 2, 3, 4, 5]));
+  const rolled = dice([1, 2, 3, 4, 5]);
+  const { usesAllDice } = detectCombinations(rolled);
   assert.equal(usesAllDice, true);
-  g.tableDice = combos[0].dieIds.map((id, i) => ({ id, value: i + 1, x: 0, y: 0, state: 'selected', comboId: 'c0' }));
-  g.currentCombos = [{ comboId: 'c0', ...combos[0], selected: true }];
-  g.usesAllDice = true;
+  g.tableDice = rolled.map((d) => ({ id: d.id, value: d.value, x: 0, y: 0, state: 'scorable', selected: true }));
   let hot = null;
   g.on('hotDice', (e) => (hot = e));
   g.reroll();
@@ -199,13 +217,18 @@ test('Test 12 — Atteindre 10 000 points => victoire', () => {
   const g = new GameController(['Thomas', 'Julie']);
   g.players[0].score = 9600;
   g.turnScore = 0;
-  g.currentCombos = [{ comboId: 'c0', type: 'brelan', dieIds: ['a', 'b', 'c'], points: 650, selected: true }];
+  g.tableDice = [
+    { id: 'a', value: 4, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'b', value: 4, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'c', value: 4, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'd', value: 4, x: 0, y: 0, state: 'scorable', selected: true },
+  ]; // carré de 4 = 800 points
   let victory = null;
   g.on('victory', (e) => (victory = e));
   g.bankScore();
   assert.ok(victory);
   assert.equal(victory.player.name, 'Thomas');
-  assert.equal(victory.player.score, 10250);
+  assert.equal(victory.player.score, 10400);
   assert.equal(g.gameOver, true);
 });
 

@@ -3,14 +3,15 @@
  *
  * RemoteController expose EXACTEMENT la même interface publique que
  * GameController (js/game.js) : on()/emit(), les mêmes getters
- * (tableDice, currentCombos, currentPlayer, canAct, bankable…) et les
- * mêmes méthodes d'action (roll, toggleCombo, reroll, bankScore). La
- * différence est que ces méthodes n'exécutent aucune règle localement :
- * elles envoient l'intention au serveur, qui fait tourner le vrai
- * GameController de façon autoritaire et renvoie l'état à jour. Grâce à
- * cette interface commune, js/main.js peut piloter une partie locale ou
- * une partie en ligne avec exactement le même code d'affichage.
+ * (tableDice, hintCombos, currentPlayer, canAct, bankable…) et les mêmes
+ * méthodes d'action (roll, toggleDie, reroll, bankScore). La différence
+ * est que ces méthodes n'exécutent aucune règle localement : elles
+ * envoient l'intention au serveur, qui fait tourner le vrai GameController
+ * de façon autoritaire et renvoie l'état à jour. Grâce à cette interface
+ * commune, js/main.js peut piloter une partie locale ou une partie en
+ * ligne avec exactement le même code d'affichage.
  */
+import { detectCombinations, calculateScore } from './engine.js';
 
 function wsUrl() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -26,9 +27,8 @@ export class RemoteController {
     this.turnScore = 0;
     this.tableDice = [];
     this.committedDice = [];
-    this.currentCombos = [];
+    this.hintCombos = [];
     this.isBust = false;
-    this.usesAllDice = false;
     this.gameOver = false;
     this.winner = null;
     this.listeners = {};
@@ -50,19 +50,25 @@ export class RemoteController {
   get currentPlayer() { return this.players[this.currentPlayerIndex]; }
   get isMyTurn() { return this.currentPlayerIndex === this.memberId; }
 
-  get canAct() {
-    return this.currentCombos.filter((c) => c.selected).reduce((s, c) => s + c.points, 0) > 0;
+  /** Même logique que GameController._selectedPoints(), recalculée côté client
+   * pour un retour instantané (boutons activés/désactivés) sans attendre le
+   * serveur ; le serveur reste seul autoritaire sur ce qui est réellement banké. */
+  _selectedPoints() {
+    const selected = this.tableDice.filter((d) => d.selected).map((d) => ({ id: d.id, value: d.value }));
+    const det = detectCombinations(selected);
+    if (det.combos.length === 0 || det.deadIds.length > 0) return 0;
+    return calculateScore(det.combos);
   }
-  get bankable() {
-    return this.turnScore + this.currentCombos.filter((c) => c.selected).reduce((s, c) => s + c.points, 0);
-  }
+
+  get canAct() { return this._selectedPoints() > 0; }
+  get bankable() { return this.turnScore + this._selectedPoints(); }
 
   _send(payload) {
     if (this.socket.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(payload));
   }
 
   roll() { this._send({ type: 'action', action: 'roll' }); }
-  toggleCombo(comboId) { this._send({ type: 'action', action: 'toggle', comboId }); }
+  toggleDie(dieId) { this._send({ type: 'action', action: 'toggleDie', dieId }); }
   reroll() { this._send({ type: 'action', action: 'reroll' }); }
   bankScore() { this._send({ type: 'action', action: 'bank' }); }
 

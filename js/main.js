@@ -178,10 +178,10 @@ let controller = null;
 // s'animer après une sécurisation ; le délai "bust" laisse d'abord les dés
 // terminer leur vol et se poser avant de révéler le tour perdu.
 const BANK_TRANSITION_DELAY = 780;
-// Le lancer le plus lent = 4 dés de décalage en cascade (4×90ms) + la durée
-// de vol la plus longue (~1450ms) + une marge de jitter : on attend que
+// Le lancer le plus lent = 4 dés de décalage en cascade (4×70ms) + la durée
+// de vol la plus longue (~940ms) + une marge de jitter : on attend que
 // TOUS les dés soient posés avant de révéler un tour perdu.
-const BUST_REVEAL_DELAY = 1900;
+const BUST_REVEAL_DELAY = 1300;
 const BUST_FADE_DURATION = 420;
 let turnTransitionDelay = BANK_TRANSITION_DELAY;
 
@@ -224,9 +224,7 @@ function updateHud() {
   const p = controller.currentPlayer;
   el.playerName.textContent = p.name;
   UI.animateNumber(el.score, p.score);
-  const pending = controller.currentCombos.filter((c) => c.selected).reduce((s, c) => s + c.points, 0);
-  const total = controller.turnScore + pending;
-  UI.animateNumber(el.turnPoints, total, { prefix: '+', duration: 260 });
+  UI.animateNumber(el.turnPoints, controller.bankable, { prefix: '+', duration: 260 });
 }
 
 function updateActionAvailability() {
@@ -245,7 +243,7 @@ let lastUnlockedOrigins = [];
 
 function captureUnlockedOrigins() {
   lastUnlockedOrigins = controller.tableDice
-    .filter((d) => d.state !== 'selected')
+    .filter((d) => !d.selected)
     .map((d) => ({ x: d.x, y: d.y }));
 }
 
@@ -255,7 +253,7 @@ function wireController(ctrl) {
       const origin = lastUnlockedOrigins[i];
       // Chaque dé part un peu après le précédent (cadence en cascade) pour
       // qu'on voie clairement 5 dés distincts être lancés, pas un bloc figé.
-      UI.throwDie(el.diceLayer, die, { ...(origin ? { fromPosition: origin } : {}), delay: i * 90 });
+      UI.throwDie(el.diceLayer, die, { ...(origin ? { fromPosition: origin } : {}), delay: i * 70 });
     });
     lastUnlockedOrigins = [];
 
@@ -265,7 +263,7 @@ function wireController(ctrl) {
     turnTransitionDelay = BANK_TRANSITION_DELAY;
 
     if (!isBust) {
-      UI.showComboBanner(el.comboBanner, el.comboLabel, el.comboPoints, ctrl.currentCombos);
+      UI.showComboBanner(el.comboBanner, el.comboLabel, el.comboPoints, ctrl.hintCombos);
       el.btnRoll.hidden = true;
       el.btnReroll.hidden = !isMyTurn();
       el.btnBank.hidden = !isMyTurn();
@@ -280,7 +278,7 @@ function wireController(ctrl) {
   ctrl.on('selectionChanged', () => {
     updateHud();
     updateActionAvailability();
-    controller.tableDice.forEach((d) => UI.markDieState(el.diceLayer, d.id, d.state));
+    controller.tableDice.forEach((d) => UI.markDieState(el.diceLayer, d.id, d));
   });
 
   ctrl.on('bust', ({ lost, wasFirstRoll }) => {
@@ -367,8 +365,11 @@ el.diceLayer.addEventListener('click', (e) => {
   const dieEl = e.target.closest('.die');
   if (!dieEl || !controller || !isMyTurn()) return;
   const die = controller.tableDice.find((d) => d.id === dieEl.dataset.dieId);
-  if (!die || !die.comboId) return; // dé mort : non sélectionnable
-  controller.toggleCombo(die.comboId);
+  if (!die) return;
+  // Sélection entièrement libre : le joueur choisit lui-même quels dés
+  // garder, y compris un dé qui ne rapporte rien seul — le contrôleur
+  // recalcule les points de la sélection à chaque changement.
+  controller.toggleDie(die.id);
 });
 
 el.btnRoll.addEventListener('click', () => {

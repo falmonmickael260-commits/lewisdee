@@ -34,6 +34,59 @@ function buildDieFace(value) {
 }
 
 /**
+ * Construit une trajectoire de lancer physiquement crédible : un arc
+ * parabolique unique (comme un vrai objet lancé à la main, qui monte puis
+ * retombe) plutôt qu'une série de zigzags, suivi d'un seul petit rebond qui
+ * s'amortit. La rotation est continue sur tout le vol (pas de à-coups) et
+ * ralentit naturellement en même temps que la chute.
+ */
+function buildThrowKeyframes({ dxPx, dyPx, startRot, endRot }) {
+  const frames = [];
+  const peakHeight = 55 + Math.random() * 35; // hauteur de l'arc, modeste et crédible
+  // Léger arc latéral (pas un looping) pour éviter une ligne parfaitement
+  // droite, comme un vrai poignet qui n'est jamais parfaitement rectiligne.
+  const lateralDir = Math.random() < 0.5 ? -1 : 1;
+  const lateralMag = (14 + Math.random() * 20) * lateralDir;
+  const dist = Math.hypot(dxPx, dyPx) || 1;
+  const perpX = (-dyPx / dist) * lateralMag;
+  const perpY = (dxPx / dist) * lateralMag;
+
+  // --- Phase de vol : de t=0 (position de départ) à t=1 (position finale) ---
+  const FLIGHT_STEPS = 11;
+  const FLIGHT_END_OFFSET = 0.82;
+  for (let i = 0; i < FLIGHT_STEPS; i++) {
+    const t = i / (FLIGHT_STEPS - 1);
+    // Smootherstep : accélère puis ralentit naturellement, sans à-coup.
+    const ease = t * t * (3 - 2 * t);
+    const x = dxPx * (1 - ease) + Math.sin(t * Math.PI) * perpX;
+    const y = dyPx * (1 - ease) + Math.sin(t * Math.PI) * perpY - peakHeight * 4 * t * (1 - t);
+    const rot = startRot + (endRot - startRot) * ease;
+    const scale = 0.72 + 0.28 * Math.min(1, t * 2.2); // léger "décollage" en tout début de vol
+    frames.push({
+      transform: `translate(-50%, -50%) translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${rot.toFixed(2)}deg) scale(${scale.toFixed(3)})`,
+      offset: t * FLIGHT_END_OFFSET,
+    });
+  }
+
+  // --- Phase d'atterrissage : un seul petit rebond qui s'amortit ---
+  const bounceRot = endRot + (Math.random() * 10 - 5);
+  frames.push({
+    transform: `translate(-50%, -50%) translate(0px, 0px) rotate(${bounceRot.toFixed(2)}deg) scale(1.04)`,
+    offset: FLIGHT_END_OFFSET,
+  });
+  frames.push({
+    transform: `translate(-50%, -50%) translate(0px, -16px) rotate(${(endRot + 2).toFixed(2)}deg) scale(0.98)`,
+    offset: FLIGHT_END_OFFSET + (1 - FLIGHT_END_OFFSET) * 0.45,
+  });
+  frames.push({
+    transform: `translate(-50%, -50%) translate(0px, 0px) rotate(${endRot}deg) scale(1)`,
+    offset: 1,
+  });
+
+  return frames;
+}
+
+/**
  * Crée (ou réutilise) l'élément DOM d'un dé et l'anime de sa position de
  * départ (proche du centre de la table) vers sa position finale, avec
  * rotation et léger rebond — chaque dé ayant sa propre trajectoire,
@@ -51,15 +104,12 @@ export function throwDie(layer, die, opts = {}) {
   } else {
     el.replaceChildren(buildDieFace(die.value));
   }
-  el.className = `die ${die.state || ''}`.trim();
+  el.className = dieClassName(die);
 
-  const start = opts.fromPosition || generateThrowOrigin(2.2);
-  const startRot = Math.random() * 60 - 30;
+  const start = opts.fromPosition || generateThrowOrigin(1.8);
+  const startRot = Math.random() * 50 - 25;
   const spinDir = Math.random() < 0.5 ? -1 : 1;
   const endRot = randomFinalRotation() + randomSpin() * spinDir;
-  // Rotation intermédiaire (avant l'arrêt final) pour que le dé continue
-  // visiblement à tourner pendant tout le vol, pas seulement au début.
-  const midRot = endRot * 0.62 + 130 * spinDir;
   const duration = reducedMotion ? 1 : randomThrowDuration();
   // Décalage en cascade : chaque dé part un peu après le précédent, comme
   // une vraie poignée de dés lancée à la main — c'est ce qui donne le
@@ -82,42 +132,30 @@ export function throwDie(layer, die, opts = {}) {
   const dxPx = (dx / 100) * containerSize;
   const dyPx = (dy / 100) * containerSize;
 
-  // Trajectoire COURBE : chaque dé dévie latéralement (perpendiculairement à
-  // sa ligne directe départ→arrivée) d'une quantité et d'un sens propres à
-  // lui, façon vrai jet à la main. C'est ce qui fait que les 5 dés partent
-  // visiblement "dans tous les sens" plutôt que le long d'une même ligne.
-  const travelAngle = Math.atan2(dyPx, dxPx) || 0;
-  const curveDir = Math.random() < 0.5 ? -1 : 1;
-  const curveMag = (90 + Math.random() * 130) * curveDir;
-  const perpX = Math.cos(travelAngle + Math.PI / 2) * curveMag;
-  const perpY = Math.sin(travelAngle + Math.PI / 2) * curveMag;
+  const keyframes = buildThrowKeyframes({ dxPx, dyPx, startRot, endRot });
 
-  // Le dé "saute" nettement plus haut à mi-course, façon jet à la main,
-  // avant de retomber avec deux petits rebonds successifs à l'arrivée.
-  const hop = -(90 + Math.random() * 70);
-  const overshootX = dxPx < 0 ? -26 : 26;
-
-  const keyframes = [
-    { transform: `translate(-50%, -50%) translate(${dxPx}px, ${dyPx}px) rotate(${startRot}deg) scale(0.58)`, offset: 0, easing: 'cubic-bezier(.15,.85,.3,1)' },
-    { transform: `translate(-50%, -50%) translate(${dxPx * 0.72 + perpX}px, ${dyPx * 0.72 + perpY + hop * 0.5}px) rotate(${midRot * 0.34}deg) scale(1.22) scaleX(0.86)`, offset: 0.2, easing: 'cubic-bezier(.3,0,.3,1)' },
-    { transform: `translate(-50%, -50%) translate(${dxPx * 0.42 + perpX * 0.75}px, ${dyPx * 0.42 + perpY * 0.75 + hop}px) rotate(${midRot * 0.62}deg) scale(0.88) scaleY(0.82)`, offset: 0.42, easing: 'cubic-bezier(.3,0,.3,1)' },
-    { transform: `translate(-50%, -50%) translate(${dxPx * 0.16 + perpX * 0.3 + overshootX}px, ${dyPx * 0.16 + perpY * 0.15}px) rotate(${midRot}deg) scale(1.14) scaleX(0.9)`, offset: 0.64, easing: 'cubic-bezier(.3,0,.3,1)' },
-    { transform: `translate(-50%, -50%) translate(0px, -46px) rotate(${endRot * 0.86}deg) scale(0.95)`, offset: 0.79, easing: 'ease-out' },
-    { transform: `translate(-50%, -50%) translate(0px, 6px) rotate(${endRot * 1.015}deg) scale(0.92) scaleY(0.78)`, offset: 0.89, easing: 'ease-out' },
-    { transform: `translate(-50%, -50%) translate(0px, -12px) rotate(${endRot * 0.995}deg) scale(1.05)`, offset: 0.95, easing: 'ease-out' },
-    { transform: `translate(-50%, -50%) translate(0px, 0px) rotate(${endRot}deg) scale(1)`, offset: 1, easing: 'ease-out' },
-  ];
-
-  const anim = el.animate(keyframes, { duration, delay, fill: 'both', easing: 'ease-out' });
+  const anim = el.animate(keyframes, { duration, delay, fill: 'both', easing: 'linear' });
   // Petit éclat de lumière sur la face une fois le dé posé, pour marquer
   // l'arrêt du mouvement (sensation "vrai dé qui vient de se stabiliser").
   anim.onfinish = () => el.classList.add('settled');
   return el;
 }
 
-export function markDieState(layer, dieId, state) {
+/**
+ * Construit la classe CSS d'un dé à partir de son état de base ('scorable'
+ * / 'dead' / 'locked' / …) ET de son éventuelle sélection manuelle — le
+ * joueur peut sélectionner N'IMPORTE QUEL dé, y compris un dé "mort", donc
+ * les deux informations sont indépendantes et se combinent.
+ */
+function dieClassName(die) {
+  const base = typeof die === 'string' ? die : (die.state || '');
+  const selected = typeof die === 'object' && die.selected ? ' selected' : '';
+  return `die ${base}${selected}`.trim();
+}
+
+export function markDieState(layer, dieId, die) {
   const el = layer.querySelector(`[data-die-id="${dieId}"]`);
-  if (el) el.className = `die ${state}`.trim();
+  if (el) el.className = dieClassName(die);
 }
 
 export function clearDeadDiceFade(layer, dieIds) {

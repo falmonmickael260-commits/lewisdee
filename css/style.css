@@ -600,7 +600,11 @@ button {
     inset 0 1px 0 rgba(255,255,255,0.7),
     0 0 0 3px rgba(63,178,127,0.55);
 }
-.die.scorable, .die.selected { cursor: pointer; }
+/* Sélection entièrement libre : tout dé du lancer en cours est cliquable,
+   y compris un dé "mort" (il reste alors greyscale, mais le halo doré de
+   sélection reste visible par-dessus pour montrer qu'il a été choisi). */
+.die.dead, .die.scorable, .die.selected { cursor: pointer; }
+.die.locked { cursor: default; }
 
 /* Éclat qui balaie la face du dé une fois qu'il s'est posé */
 .die .die-face::after {
