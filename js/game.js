@@ -39,6 +39,11 @@ export class GameController {
     this.listeners = {};
     this.gameOver = false;
     this.winner = null;
+    // Contrôleur local : c'est LUI l'autorité, donc il enchaîne bien lui-même
+    // la relance automatique après verrouillage des dés conservés (voir
+    // l'événement 'readyToReroll'). Le RemoteController (js/net.js) met ce
+    // drapeau à false car c'est alors le serveur qui enchaîne.
+    this.autoChainsReroll = true;
   }
 
   on(event, handler) {

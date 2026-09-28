@@ -4,6 +4,7 @@
  */
 
 import { GameController } from './game.js';
+import { openLobby } from './net.js';
 import * as UI from './ui.js';
 
 // ------------------------------------------------------------------ DOM refs
@@ -21,14 +22,8 @@ document.querySelectorAll('[data-back]').forEach((btn) => {
 
 // ------------------------------------------------------------------ Menu
 document.getElementById('btn-play-local').addEventListener('click', () => showScreen('screen-setup'));
-document.getElementById('btn-create-room').addEventListener('click', () => {
-  document.getElementById('online-title').textContent = 'Créer une partie';
-  showScreen('screen-online');
-});
-document.getElementById('btn-join-room').addEventListener('click', () => {
-  document.getElementById('online-title').textContent = 'Rejoindre une partie';
-  showScreen('screen-online');
-});
+document.getElementById('btn-create-room').addEventListener('click', () => openOnlineScreen('create'));
+document.getElementById('btn-join-room').addEventListener('click', () => openOnlineScreen('join'));
 document.getElementById('btn-rules').addEventListener('click', () => showScreen('screen-rules'));
 document.getElementById('btn-settings').addEventListener('click', () => showScreen('screen-settings'));
 
@@ -73,6 +68,91 @@ document.getElementById('btn-start-game').addEventListener('click', () => {
   startGame(names);
 });
 
+// ------------------------------------------------------------------ Salon en ligne
+const onlineEl = {
+  back: document.getElementById('online-back'),
+  title: document.getElementById('online-title'),
+  stepForm: document.getElementById('online-step-form'),
+  stepLobby: document.getElementById('online-step-lobby'),
+  name: document.getElementById('online-name'),
+  codeRow: document.getElementById('online-code-row'),
+  codeInput: document.getElementById('online-code-input'),
+  error: document.getElementById('online-error'),
+  submit: document.getElementById('online-submit'),
+  roomCode: document.getElementById('online-room-code'),
+  lobbyPlayers: document.getElementById('online-lobby-players'),
+  startBtn: document.getElementById('online-start-btn'),
+  waitNote: document.getElementById('online-wait-note'),
+};
+
+let lobby = null; // objet retourné par openLobby()
+let onlineMode = null; // 'create' | 'join'
+let isOnlineGame = false;
+let myMemberId = null;
+
+function openOnlineScreen(mode) {
+  onlineMode = mode;
+  onlineEl.title.textContent = mode === 'create' ? 'Créer une partie' : 'Rejoindre une partie';
+  onlineEl.codeRow.hidden = mode !== 'join';
+  onlineEl.error.hidden = true;
+  onlineEl.name.value = '';
+  onlineEl.codeInput.value = '';
+  onlineEl.stepForm.hidden = false;
+  onlineEl.stepLobby.hidden = true;
+  onlineEl.submit.disabled = false;
+  showScreen('screen-online');
+}
+
+onlineEl.back.addEventListener('click', () => { if (lobby) { lobby.close(); lobby = null; } });
+
+onlineEl.submit.addEventListener('click', () => {
+  const name = onlineEl.name.value.trim() || 'Joueur';
+  onlineEl.error.hidden = true;
+  onlineEl.submit.disabled = true;
+
+  lobby = openLobby({
+    onCreated: (code) => { myMemberId = 0; renderLobbyCode(code); },
+    onJoined: () => { onlineEl.stepForm.hidden = true; onlineEl.stepLobby.hidden = false; },
+    onLobby: (msg) => renderLobby(msg),
+    onError: (message) => {
+      onlineEl.error.textContent = message;
+      onlineEl.error.hidden = false;
+      onlineEl.submit.disabled = false;
+    },
+    onStarted: (remoteController) => {
+      isOnlineGame = true;
+      myMemberId = remoteController.memberId;
+      enterGame(remoteController);
+    },
+  });
+
+  if (onlineMode === 'create') lobby.create(name);
+  else lobby.join(onlineEl.codeInput.value, name);
+});
+
+function renderLobbyCode(code) {
+  onlineEl.stepForm.hidden = true;
+  onlineEl.stepLobby.hidden = false;
+  onlineEl.roomCode.textContent = code;
+}
+
+function renderLobby(msg) {
+  onlineEl.roomCode.textContent = msg.code;
+  onlineEl.lobbyPlayers.replaceChildren();
+  msg.players.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = `lobby-player-row${p.connected ? '' : ' disconnected'}`;
+    row.innerHTML = `<span class="avatar">${AVATAR_ICONS[i % AVATAR_ICONS.length]}</span><span>${UI.escapeHtml(p.name)}</span>${p.id === msg.hostId ? '<span class="lobby-host-tag">Hôte</span>' : ''}`;
+    onlineEl.lobbyPlayers.appendChild(row);
+  });
+  const isHost = msg.hostId === myMemberId;
+  onlineEl.startBtn.hidden = !isHost;
+  onlineEl.startBtn.disabled = !msg.canStart;
+  onlineEl.waitNote.hidden = isHost;
+}
+
+onlineEl.startBtn.addEventListener('click', () => lobby?.startGame());
+
 // ------------------------------------------------------------------ Écran de jeu : refs
 const el = {
   playersRing: document.getElementById('players-ring'),
@@ -89,6 +169,7 @@ const el = {
   btnReroll: document.getElementById('btn-reroll'),
   btnBank: document.getElementById('btn-bank'),
   bankAmount: document.getElementById('bank-amount'),
+  turnBanner: document.getElementById('online-turn-banner'),
 };
 
 let controller = null;
@@ -105,7 +186,12 @@ const BUST_FADE_DURATION = 420;
 let turnTransitionDelay = BANK_TRANSITION_DELAY;
 
 function startGame(names) {
-  controller = new GameController(names);
+  isOnlineGame = false;
+  enterGame(new GameController(names));
+}
+
+function enterGame(ctrl) {
+  controller = ctrl;
   wireController(controller);
   UI.removeAllDice(el.diceLayer);
   UI.hideComboBanner(el.comboBanner);
@@ -113,11 +199,23 @@ function startGame(names) {
   updateHud();
   UI.renderPlayers(el.playersRing, controller.players, controller.currentPlayerIndex);
   resetActionButtons();
+  updateTurnBanner();
   showScreen('screen-game');
 }
 
+/** En ligne, seul le joueur dont c'est le tour peut agir. */
+function isMyTurn() {
+  return !isOnlineGame || controller.currentPlayerIndex === myMemberId;
+}
+
+function updateTurnBanner() {
+  if (!isOnlineGame || !controller) { el.turnBanner.hidden = true; return; }
+  el.turnBanner.hidden = false;
+  el.turnBanner.textContent = isMyTurn() ? 'À vous de jouer !' : `Tour de ${controller.currentPlayer.name}…`;
+}
+
 function resetActionButtons() {
-  el.btnRoll.hidden = false;
+  el.btnRoll.hidden = !isMyTurn();
   el.btnReroll.hidden = true;
   el.btnBank.hidden = true;
 }
@@ -169,13 +267,14 @@ function wireController(ctrl) {
     if (!isBust) {
       UI.showComboBanner(el.comboBanner, el.comboLabel, el.comboPoints, ctrl.currentCombos);
       el.btnRoll.hidden = true;
-      el.btnReroll.hidden = false;
-      el.btnBank.hidden = false;
+      el.btnReroll.hidden = !isMyTurn();
+      el.btnBank.hidden = !isMyTurn();
       updateActionAvailability();
     } else {
       UI.hideComboBanner(el.comboBanner);
     }
     updateHud();
+    updateTurnBanner();
   });
 
   ctrl.on('selectionChanged', () => {
@@ -188,6 +287,11 @@ function wireController(ctrl) {
     el.btnRoll.hidden = true;
     el.btnReroll.hidden = true;
     el.btnBank.hidden = true;
+    // On capture les ids MAINTENANT : en ligne, l'événement 'turnChanged'
+    // qui suit peut arriver et réécrire l'état du contrôleur avant que ce
+    // minuteur ne se déclenche — il ne faut pas relire controller.* plus tard.
+    const deadIds = ctrl.tableDice.map((d) => d.id);
+    const committedIds = ctrl.committedDice.map((d) => d.id);
     // On laisse le temps aux dés de terminer leur vol et de se poser
     // (même timing que l'animation de lancer) avant de révéler le "tour
     // perdu" : le joueur doit d'abord VOIR où les dés sont tombés.
@@ -198,10 +302,9 @@ function wireController(ctrl) {
         : `${lost.toLocaleString('fr-FR')} points perdus.`;
       UI.hideComboBanner(el.comboBanner);
       UI.showBustBanner(el.bustBanner, el.bustSub, msg);
-      const deadIds = controller.tableDice.map((d) => d.id);
       UI.clearDeadDiceFade(el.diceLayer, deadIds);
       // Les dés verrouillés lors des relances précédentes de ce tour disparaissent aussi.
-      UI.clearDeadDiceFade(el.diceLayer, controller.committedDice.map((d) => d.id));
+      UI.clearDeadDiceFade(el.diceLayer, committedIds);
     }, BUST_REVEAL_DELAY);
   });
 
@@ -212,6 +315,7 @@ function wireController(ctrl) {
       UI.hideComboBanner(el.comboBanner);
       resetActionButtons();
       updateHud();
+      updateTurnBanner();
     }, turnTransitionDelay);
   });
 
@@ -235,7 +339,9 @@ function wireController(ctrl) {
     el.btnBank.hidden = true;
     el.btnRoll.hidden = true; // on relance automatiquement
     updateHud();
-    ctrl.roll();
+    // En ligne, c'est le SERVEUR qui enchaîne la relance (seule autorité) ;
+    // en local, c'est ce client-ci qui le fait directement.
+    if (ctrl.autoChainsReroll) ctrl.roll();
   });
 
   ctrl.on('banked', ({ player, gained, newScore }) => {
@@ -259,31 +365,33 @@ function wireController(ctrl) {
 
 el.diceLayer.addEventListener('click', (e) => {
   const dieEl = e.target.closest('.die');
-  if (!dieEl || !controller) return;
+  if (!dieEl || !controller || !isMyTurn()) return;
   const die = controller.tableDice.find((d) => d.id === dieEl.dataset.dieId);
   if (!die || !die.comboId) return; // dé mort : non sélectionnable
   controller.toggleCombo(die.comboId);
 });
 
 el.btnRoll.addEventListener('click', () => {
-  if (!controller) return;
+  if (!controller || !isMyTurn()) return;
   controller.roll();
 });
 
 el.btnReroll.addEventListener('click', () => {
-  if (!controller || !controller.canAct) return;
+  if (!controller || !controller.canAct || !isMyTurn()) return;
   captureUnlockedOrigins();
   controller.reroll(); // émet diceLocked/hotDice puis readyToReroll (qui relance automatiquement)
 });
 
 el.btnBank.addEventListener('click', () => {
-  if (!controller || !controller.canAct) return;
+  if (!controller || !controller.canAct || !isMyTurn()) return;
   controller.bankScore();
 });
 
 document.getElementById('btn-quit-game').addEventListener('click', () => {
   if (confirm('Quitter la partie en cours ?')) {
+    if (isOnlineGame && lobby) { lobby.close(); lobby = null; }
     controller = null;
+    isOnlineGame = false;
     showScreen('screen-menu');
   }
 });
@@ -303,6 +411,7 @@ function showVictory(winner, ranking) {
     row.innerHTML = `<span>${i + 1}. ${UI.escapeHtml(p.name)}</span><span>${p.score.toLocaleString('fr-FR')} pts</span>`;
     rankEl.appendChild(row);
   });
+  document.getElementById('btn-replay').textContent = isOnlineGame ? 'NOUVEAU SALON' : 'REJOUER';
   showScreen('screen-victory');
   if (confettiStop) confettiStop();
   confettiStop = UI.launchConfetti(document.getElementById('confetti-canvas'));
@@ -310,12 +419,23 @@ function showVictory(winner, ranking) {
 
 document.getElementById('btn-replay').addEventListener('click', () => {
   if (confettiStop) confettiStop();
+  if (isOnlineGame) {
+    // Une partie en ligne terminée ferme le salon : il faut en recréer un
+    // pour rejouer (les codes de salon ne sont pas réutilisables).
+    if (lobby) { lobby.close(); lobby = null; }
+    isOnlineGame = false;
+    controller = null;
+    showScreen('screen-menu');
+    return;
+  }
   const names = controller ? controller.players.map((p) => p.name) : DEFAULT_NAMES.slice(0, playerCount);
   startGame(names);
 });
 
 document.getElementById('btn-victory-menu').addEventListener('click', () => {
   if (confettiStop) confettiStop();
+  if (isOnlineGame && lobby) { lobby.close(); lobby = null; }
+  isOnlineGame = false;
   controller = null;
   showScreen('screen-menu');
 });

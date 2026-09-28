@@ -1,19 +1,22 @@
 /**
- * server.js — Serveur statique minimal, sans dépendance externe.
+ * server.js — Serveur statique + salons multijoueur en temps réel.
  *
- * Le jeu est un site 100% statique (HTML/CSS/JS), mais un hébergeur comme
- * Railway a besoin d'un process qui écoute sur le port qu'il fournit
- * (process.env.PORT). Ce petit serveur sert simplement les fichiers du
- * dossier courant, avec les bons types MIME pour que les modules ES
- * (js/main.js etc.) se chargent correctement dans le navigateur.
+ * Sert les fichiers du jeu (HTML/CSS/JS) et, sur le même port, un serveur
+ * WebSocket pour les salons en ligne (voir net/rooms.js). Railway n'a besoin
+ * que d'un seul process écoutant process.env.PORT — c'est celui-ci.
  */
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { join, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { WebSocketServer } from 'ws';
+import { RoomManager } from './net/rooms.js';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
-const PORT = process.env.PORT || 3000;
+// 8743 par défaut pour coller au port utilisé par l'aperçu local de ce
+// projet ; Railway (et tout hébergeur sérieux) fournit de toute façon sa
+// propre variable PORT, qui prime toujours sur ce repli.
+const PORT = process.env.PORT || 8743;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -65,6 +68,42 @@ const server = createServer(async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Salons multijoueur en temps réel (WebSocket)
+// ---------------------------------------------------------------------------
+
+const rooms = new RoomManager();
+const wss = new WebSocketServer({ server, path: '/ws' });
+
+wss.on('connection', (ws) => {
+  ws.on('message', (raw) => {
+    let msg;
+    try {
+      msg = JSON.parse(raw.toString());
+    } catch {
+      return;
+    }
+    switch (msg.type) {
+      case 'create':
+        rooms.create(ws, msg.name);
+        break;
+      case 'join':
+        rooms.join(ws, msg.code, msg.name);
+        break;
+      case 'startGame':
+        rooms.start(ws);
+        break;
+      case 'action':
+        rooms.action(ws, msg);
+        break;
+      default:
+        break;
+    }
+  });
+  ws.on('close', () => rooms.handleClose(ws));
+  ws.on('error', () => rooms.handleClose(ws));
+});
+
 server.listen(PORT, () => {
-  console.log(`10 000 — serveur statique prêt sur le port ${PORT}`);
+  console.log(`10 000 — serveur prêt sur le port ${PORT} (HTTP + WebSocket /ws)`);
 });

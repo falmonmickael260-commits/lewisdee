@@ -53,17 +53,37 @@
     </div>
   </section>
 
-  <!-- ======================= ÉCRAN : SALLE EN LIGNE (STUB) ======================= -->
+  <!-- ======================= ÉCRAN : SALON EN LIGNE ======================= -->
   <section id="screen-online" class="screen">
     <div class="panel">
-      <button class="btn-back" data-back="screen-menu">← Menu</button>
+      <button class="btn-back" data-back="screen-menu" id="online-back">← Menu</button>
       <h2 id="online-title">Partie en ligne</h2>
-      <p class="online-note">
-        Le mode en ligne arrive bientôt. L'architecture (salons, codes de partie,
-        synchronisation des tours, des dés et des scores) est déjà prête côté moteur
-        pour se brancher sur Supabase — il ne manque que le serveur.
-      </p>
-      <button class="btn btn-primary" data-back="screen-menu">Retour au menu</button>
+
+      <!-- Étape 1 : nom (+ code si on rejoint) -->
+      <div id="online-step-form" class="online-step">
+        <div class="name-input-row">
+          <span class="avatar">🦊</span>
+          <input type="text" id="online-name" maxlength="14" placeholder="Votre nom" />
+        </div>
+        <div class="name-input-row" id="online-code-row" hidden>
+          <span class="avatar">🔑</span>
+          <input type="text" id="online-code-input" maxlength="5" placeholder="Code du salon" style="text-transform:uppercase; letter-spacing:0.15em;" />
+        </div>
+        <p class="online-error" id="online-error" hidden></p>
+        <button class="btn btn-primary btn-lg" id="online-submit">CONTINUER</button>
+      </div>
+
+      <!-- Étape 2 : salon d'attente -->
+      <div id="online-step-lobby" class="online-step" hidden>
+        <div class="room-code-display">
+          <span class="hud-label">CODE DU SALON</span>
+          <span class="room-code" id="online-room-code">—</span>
+          <span class="room-code-hint">Communiquez ce code aux autres joueurs</span>
+        </div>
+        <div class="lobby-players" id="online-lobby-players"></div>
+        <button class="btn btn-primary btn-lg" id="online-start-btn" hidden>COMMENCER LA PARTIE</button>
+        <p class="online-note" id="online-wait-note" hidden>En attente que l'hôte lance la partie…</p>
+      </div>
     </div>
   </section>
 
@@ -253,6 +273,8 @@
             <span class="bust-title">💥 TOUR PERDU</span>
             <span class="bust-sub" id="bust-sub"></span>
           </div>
+
+          <div class="online-turn-banner" id="online-turn-banner" hidden></div>
         </div>
       </div>
 
