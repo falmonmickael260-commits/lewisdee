@@ -488,6 +488,10 @@ button {
   position: absolute;
   inset: 0;
   z-index: 5;
+  /* Perspective pour que la culbute 3D (rotateX/rotateY) des dés pendant le
+     vol se voie vraiment comme une bascule dans l'espace, pas un simple
+     écrasement 2D. */
+  perspective: 820px;
 }
 
 /* Ambiance lumineuse douce et poussière dorée en suspension au-dessus du feutre.
@@ -537,6 +541,8 @@ button {
   left: 0; top: 0;
   will-change: transform;
   transform-origin: 50% 50%;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
 }
 .die .die-face {
   width: 100%; height: 100%;

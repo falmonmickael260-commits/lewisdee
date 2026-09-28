@@ -5,7 +5,9 @@
  * relayer les interactions (tap sur un dé, clic sur un bouton) vers lui.
  */
 
-import { BOARD_CENTER, generateThrowOrigin, randomSpin, randomFinalRotation, randomThrowDuration } from './positions.js';
+import { BOARD_CENTER, generateThrowOrigin, randomSpin, randomFinalRotation } from './positions.js';
+import { randomizeDiePhysics, buildDiceThrowKeyframes } from './dicePhysics.js';
+import { playImpactSound, playRollSound } from './sound.js';
 
 const FACES = {
   1: ['p1'],
@@ -34,63 +36,13 @@ function buildDieFace(value) {
 }
 
 /**
- * Construit une trajectoire de lancer physiquement crédible : un arc
- * parabolique unique (comme un vrai objet lancé à la main, qui monte puis
- * retombe) plutôt qu'une série de zigzags, suivi d'un seul petit rebond qui
- * s'amortit. La rotation est continue sur tout le vol (pas de à-coups) et
- * ralentit naturellement en même temps que la chute.
- */
-function buildThrowKeyframes({ dxPx, dyPx, startRot, endRot }) {
-  const frames = [];
-  const peakHeight = 55 + Math.random() * 35; // hauteur de l'arc, modeste et crédible
-  // Léger arc latéral (pas un looping) pour éviter une ligne parfaitement
-  // droite, comme un vrai poignet qui n'est jamais parfaitement rectiligne.
-  const lateralDir = Math.random() < 0.5 ? -1 : 1;
-  const lateralMag = (14 + Math.random() * 20) * lateralDir;
-  const dist = Math.hypot(dxPx, dyPx) || 1;
-  const perpX = (-dyPx / dist) * lateralMag;
-  const perpY = (dxPx / dist) * lateralMag;
-
-  // --- Phase de vol : de t=0 (position de départ) à t=1 (position finale) ---
-  const FLIGHT_STEPS = 11;
-  const FLIGHT_END_OFFSET = 0.82;
-  for (let i = 0; i < FLIGHT_STEPS; i++) {
-    const t = i / (FLIGHT_STEPS - 1);
-    // Smootherstep : accélère puis ralentit naturellement, sans à-coup.
-    const ease = t * t * (3 - 2 * t);
-    const x = dxPx * (1 - ease) + Math.sin(t * Math.PI) * perpX;
-    const y = dyPx * (1 - ease) + Math.sin(t * Math.PI) * perpY - peakHeight * 4 * t * (1 - t);
-    const rot = startRot + (endRot - startRot) * ease;
-    const scale = 0.72 + 0.28 * Math.min(1, t * 2.2); // léger "décollage" en tout début de vol
-    frames.push({
-      transform: `translate(-50%, -50%) translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${rot.toFixed(2)}deg) scale(${scale.toFixed(3)})`,
-      offset: t * FLIGHT_END_OFFSET,
-    });
-  }
-
-  // --- Phase d'atterrissage : un seul petit rebond qui s'amortit ---
-  const bounceRot = endRot + (Math.random() * 10 - 5);
-  frames.push({
-    transform: `translate(-50%, -50%) translate(0px, 0px) rotate(${bounceRot.toFixed(2)}deg) scale(1.04)`,
-    offset: FLIGHT_END_OFFSET,
-  });
-  frames.push({
-    transform: `translate(-50%, -50%) translate(0px, -16px) rotate(${(endRot + 2).toFixed(2)}deg) scale(0.98)`,
-    offset: FLIGHT_END_OFFSET + (1 - FLIGHT_END_OFFSET) * 0.45,
-  });
-  frames.push({
-    transform: `translate(-50%, -50%) translate(0px, 0px) rotate(${endRot}deg) scale(1)`,
-    offset: 1,
-  });
-
-  return frames;
-}
-
-/**
- * Crée (ou réutilise) l'élément DOM d'un dé et l'anime de sa position de
- * départ (proche du centre de la table) vers sa position finale, avec
- * rotation et léger rebond — chaque dé ayant sa propre trajectoire,
- * vitesse et durée.
+ * Crée (ou réutilise) l'élément DOM d'un dé et l'anime avec une vraie
+ * physique de lancer : vol en arc, culbute 3D indépendante par dé, impact,
+ * un à trois rebonds qui s'amortissent, roulement (rotation qui continue en
+ * ralentissant), puis glissement final progressif. Chaque dé reçoit ses
+ * propres paramètres aléatoires (voir dicePhysics.js) : deux dés d'un même
+ * lancer n'ont jamais la même trajectoire, hauteur, nombre de rebonds ou
+ * vitesse de rotation.
  */
 export function throwDie(layer, die, opts = {}) {
   let el = layer.querySelector(`[data-die-id="${die.id}"]`);
@@ -107,22 +59,23 @@ export function throwDie(layer, die, opts = {}) {
   el.className = dieClassName(die);
 
   const start = opts.fromPosition || generateThrowOrigin(1.8);
-  const startRot = Math.random() * 50 - 25;
+  const startRotZ = Math.random() * 50 - 25;
   const spinDir = Math.random() < 0.5 ? -1 : 1;
-  const endRot = randomFinalRotation() + randomSpin() * spinDir;
-  const duration = reducedMotion ? 1 : randomThrowDuration();
-  // Décalage en cascade : chaque dé part un peu après le précédent, comme
-  // une vraie poignée de dés lancée à la main — c'est ce qui donne le
-  // "rythme" du lancer plutôt que 5 dés qui bougent tous d'un seul bloc.
-  const delay = reducedMotion ? 0 : (opts.delay ?? 0) + Math.random() * 50;
+  const endRotZ = randomFinalRotation() + randomSpin() * spinDir;
 
   el.style.left = `${pct(die.x)}%`;
   el.style.top = `${pct(die.y)}%`;
 
   if (reducedMotion) {
-    el.style.transform = 'translate(-50%, -50%) rotate(0deg)';
+    el.style.transform = 'translate(-50%, -50%) rotateZ(0deg)';
     return el;
   }
+
+  const physics = randomizeDiePhysics();
+  // Décalage en cascade : chaque dé part un peu après le précédent, comme
+  // une vraie poignée de dés lancée à la main — c'est ce qui donne le
+  // "rythme" du lancer plutôt que 5 dés qui bougent tous d'un seul bloc.
+  const delay = (opts.delay ?? 0) + Math.random() * 50;
 
   // On anime via un wrapper de transform relatif : on part du delta entre
   // le point de départ (proche du centre) et la position finale du dé.
@@ -132,9 +85,18 @@ export function throwDie(layer, die, opts = {}) {
   const dxPx = (dx / 100) * containerSize;
   const dyPx = (dy / 100) * containerSize;
 
-  const keyframes = buildThrowKeyframes({ dxPx, dyPx, startRot, endRot });
+  const keyframes = buildDiceThrowKeyframes(physics, { dxPx, dyPx, startRotZ, endRotZ });
 
-  const anim = el.animate(keyframes, { duration, delay, fill: 'both', easing: 'linear' });
+  const anim = el.animate(keyframes, { duration: physics.duration, delay, fill: 'both', easing: 'linear' });
+  // Bruit d'impact au moment du premier contact avec la table, puis un
+  // petit "tac" plus discret à chaque rebond suivant — le tout très subtil.
+  const flightMs = physics.bounds[1] * physics.duration;
+  setTimeout(() => playImpactSound(1), delay + flightMs);
+  for (let b = 1; b < physics.bounceCount; b++) {
+    const bounceMs = physics.bounds[1 + b] * physics.duration;
+    setTimeout(() => playImpactSound(1 - b * 0.3), delay + bounceMs);
+  }
+  setTimeout(() => playRollSound(), delay + physics.bounds[1] * physics.duration);
   // Petit éclat de lumière sur la face une fois le dé posé, pour marquer
   // l'arrêt du mouvement (sensation "vrai dé qui vient de se stabiliser").
   anim.onfinish = () => el.classList.add('settled');

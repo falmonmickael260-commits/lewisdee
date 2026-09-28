@@ -6,6 +6,7 @@
 import { GameController } from './game.js';
 import { openLobby } from './net.js';
 import * as UI from './ui.js';
+import { setSoundEnabled } from './sound.js';
 
 // ------------------------------------------------------------------ DOM refs
 const screens = {};
@@ -33,6 +34,9 @@ const AVATAR_ICONS = ['🦊', '🐺', '🦁', '🐯'];
 
 document.getElementById('toggle-reduced-motion').addEventListener('change', (e) => {
   UI.setReducedMotion(e.target.checked);
+});
+document.getElementById('toggle-sound').addEventListener('change', (e) => {
+  setSoundEnabled(e.target.checked);
 });
 
 // ------------------------------------------------------------------ Setup local
@@ -179,9 +183,11 @@ let controller = null;
 // terminer leur vol et se poser avant de révéler le tour perdu.
 const BANK_TRANSITION_DELAY = 780;
 // Le lancer le plus lent = 4 dés de décalage en cascade (4×70ms) + la durée
-// de vol la plus longue (~940ms) + une marge de jitter : on attend que
-// TOUS les dés soient posés avant de révéler un tour perdu.
-const BUST_REVEAL_DELAY = 1300;
+// de vol la plus longue (~1500ms, avec jusqu'à 3 rebonds) + une marge de
+// jitter : on attend que TOUS les dés soient posés avant de révéler un
+// tour perdu — sinon on retomberait dans le défaut déjà corrigé une fois
+// (dés coupés en plein vol).
+const BUST_REVEAL_DELAY = 1900;
 const BUST_FADE_DURATION = 420;
 let turnTransitionDelay = BANK_TRANSITION_DELAY;
 
@@ -370,6 +376,7 @@ el.diceLayer.addEventListener('click', (e) => {
   // garder, y compris un dé qui ne rapporte rien seul — le contrôleur
   // recalcule les points de la sélection à chaque changement.
   controller.toggleDie(die.id);
+  if (navigator.vibrate) navigator.vibrate(12);
 });
 
 el.btnRoll.addEventListener('click', () => {
