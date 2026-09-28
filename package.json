@@ -1,0 +1,10 @@
+{
+  "name": "jeu-10000",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Jeu de dés 10 000 — moteur + interface web premium",
+  "scripts": {
+    "test": "node tests/engine.test.mjs"
+  }
+}
