@@ -129,6 +129,13 @@ export class GameController {
     const scorableIds = new Set(detection.combos.flatMap((c) => c.dieIds));
     this.tableDice.forEach((d) => {
       d.state = scorableIds.has(d.id) ? 'scorable' : 'dead';
+      // La combinaison détectée est présélectionnée automatiquement : sans
+      // ça, "SÉCURISER"/"RELANCER" affichent 0 point tant que le joueur n'a
+      // pas pensé à taper lui-même sur les dés, ce qui donnait l'impression
+      // trompeuse qu'une main reprise (ou n'importe quel lancer) ne rapporte
+      // rien. Le joueur reste libre de désélectionner s'il préfère tout
+      // relancer plutôt que garder cette combinaison.
+      if (d.state === 'scorable') d.selected = true;
     });
 
     this.emit('rolled', {

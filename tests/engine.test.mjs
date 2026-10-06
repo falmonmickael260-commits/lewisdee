@@ -307,6 +307,32 @@ test('Test 14bis — roll() déclenche un tour perdu automatique si la combinais
   assert.equal(g.currentPlayerIndex, 1, 'la main passe bien au joueur suivant');
 });
 
+// --- Test 15 : la combinaison détectée est présélectionnée automatiquement --
+test('Test 15 — roll() présélectionne automatiquement la combinaison trouvée (pas 0 point par défaut)', () => {
+  const g = new GameController(['A', 'B']);
+  g.roll();
+  if (g.isBust) return; // lancer malchanceux, rien à vérifier ici
+  // Sans qu'on ait rien sélectionné soi-même, la combinaison détectée doit
+  // déjà être prête à sécuriser/relancer.
+  assert.equal(g.canAct, true, 'canAct doit être vrai dès le lancer si une combinaison existe');
+  assert.ok(g.bankable > 0, 'bankable doit refléter la combinaison détectée sans tap supplémentaire');
+  const scorableDice = g.tableDice.filter((d) => d.state === 'scorable');
+  assert.ok(scorableDice.every((d) => d.selected === true), 'tous les dés scorables doivent être présélectionnés');
+});
+
+test('Test 15bis — une main reprise (dés hérités) est elle aussi présélectionnée et sécurisable', () => {
+  const g = new GameController(['A', 'B']);
+  g.pendingInherited = [
+    { id: 'x', value: 4 }, { id: 'y', value: 4 }, { id: 'z', value: 4 },
+  ];
+  g.roll();
+  assert.equal(g.isBust, false);
+  assert.equal(g.canAct, true);
+  // Les 2 dés neufs peuvent parfois étendre la combinaison (full, carré…) :
+  // on vérifie juste qu'on a AU MOINS le brelan hérité, déjà sécurisable.
+  assert.ok(g.bankable >= 400, `au moins le brelan hérité (400) doit être immédiatement sécurisable, reçu ${g.bankable}`);
+});
+
 // --- Bonus : calculateScore additionne bien plusieurs combos ----------------
 test('Bonus — calculateScore additionne les combos sélectionnés', () => {
   const total = calculateScore([{ points: 300 }, { points: 150 }]);
