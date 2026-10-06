@@ -254,7 +254,7 @@ function captureUnlockedOrigins() {
 }
 
 function wireController(ctrl) {
-  ctrl.on('rolled', ({ dice, isBust }) => {
+  ctrl.on('rolled', ({ dice, isBust, inheritedCount }) => {
     dice.forEach((die, i) => {
       const origin = lastUnlockedOrigins[i];
       // Chaque dé part un peu après le précédent (cadence en cascade) pour
@@ -269,7 +269,9 @@ function wireController(ctrl) {
     turnTransitionDelay = BANK_TRANSITION_DELAY;
 
     if (!isBust) {
-      UI.showComboBanner(el.comboBanner, el.comboLabel, el.comboPoints, ctrl.hintCombos);
+      UI.showComboBanner(el.comboBanner, el.comboLabel, el.comboPoints, ctrl.hintCombos, {
+        prefix: inheritedCount > 0 ? 'MAIN REPRISE — ' : '',
+      });
       el.btnRoll.hidden = true;
       el.btnReroll.hidden = !isMyTurn();
       el.btnBank.hidden = !isMyTurn();
@@ -287,7 +289,7 @@ function wireController(ctrl) {
     controller.tableDice.forEach((d) => UI.markDieState(el.diceLayer, d.id, d));
   });
 
-  ctrl.on('bust', ({ lost, wasFirstRoll }) => {
+  ctrl.on('bust', ({ lost, wasFirstRoll, isOvershoot }) => {
     el.btnRoll.hidden = true;
     el.btnReroll.hidden = true;
     el.btnBank.hidden = true;
@@ -301,9 +303,11 @@ function wireController(ctrl) {
     // perdu" : le joueur doit d'abord VOIR où les dés sont tombés.
     turnTransitionDelay = BUST_REVEAL_DELAY + BUST_FADE_DURATION + 260;
     setTimeout(() => {
-      const msg = wasFirstRoll
-        ? 'Aucune combinaison au premier lancer.'
-        : `${lost.toLocaleString('fr-FR')} points perdus.`;
+      const msg = isOvershoot
+        ? 'Trop de points : il faut tomber pile sur 10 000.'
+        : wasFirstRoll
+          ? 'Aucune combinaison au premier lancer.'
+          : `${lost.toLocaleString('fr-FR')} points perdus.`;
       UI.hideComboBanner(el.comboBanner);
       UI.showBustBanner(el.bustBanner, el.bustSub, msg);
       UI.clearDeadDiceFade(el.diceLayer, deadIds);

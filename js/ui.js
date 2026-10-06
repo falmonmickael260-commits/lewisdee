@@ -24,15 +24,41 @@ export function setReducedMotion(v) { reducedMotion = v; }
 /** Convertit une coordonnée du repère 1000x1000 en pourcentage (0-100). */
 function pct(v) { return (v / 1000) * 100; }
 
-function buildDieFace(value) {
+function buildDieFace(value, extraClass) {
   const face = document.createElement('div');
-  face.className = 'die-face';
+  face.className = `die-face${extraClass ? ` ${extraClass}` : ''}`;
   for (let i = 1; i <= 9; i++) {
     const pip = document.createElement('span');
     pip.className = `pip p${i}${FACES[value].includes(`p${i}`) ? ' on' : ''}`;
     face.appendChild(pip);
   }
   return face;
+}
+
+// Paires de faces opposées d'un vrai dé (la somme des deux fait toujours 7).
+const OPPOSITE_PAIRS = [[1, 6], [2, 5], [3, 4]];
+
+/** Détermine les 6 valeurs du cube à partir de la face qui doit être visible de face. */
+function cubeFaceValues(value) {
+  const back = 7 - value;
+  const [pairA, pairB] = OPPOSITE_PAIRS.filter((p) => !p.includes(value));
+  return { front: value, back, right: pairA[0], left: pairA[1], top: pairB[0], bottom: pairB[1] };
+}
+
+/**
+ * Construit un VRAI cube en 3D (6 faces positionnées dans l'espace via
+ * translateZ + rotateX/rotateY, voir le CSS), pas un simple plan qu'on
+ * penche. C'est ce qui permet à la culbute du lancer de montrer de vraies
+ * faces adjacentes pendant le vol, au lieu d'un carré plat qui se tord.
+ */
+function buildDieCube(value) {
+  const cube = document.createElement('div');
+  cube.className = 'die-cube';
+  const values = cubeFaceValues(value);
+  for (const [faceName, faceValue] of Object.entries(values)) {
+    cube.appendChild(buildDieFace(faceValue, `face-${faceName}`));
+  }
+  return cube;
 }
 
 /**
@@ -51,10 +77,10 @@ export function throwDie(layer, die, opts = {}) {
     el = document.createElement('div');
     el.className = 'die';
     el.dataset.dieId = die.id;
-    el.appendChild(buildDieFace(die.value));
+    el.appendChild(buildDieCube(die.value));
     layer.appendChild(el);
   } else {
-    el.replaceChildren(buildDieFace(die.value));
+    el.replaceChildren(buildDieCube(die.value));
   }
   el.className = dieClassName(die);
 
@@ -65,6 +91,12 @@ export function throwDie(layer, die, opts = {}) {
 
   el.style.left = `${pct(die.x)}%`;
   el.style.top = `${pct(die.y)}%`;
+
+  // Demi-taille réelle du dé en pixels, pour que les 6 faces du cube
+  // (translateZ) se positionnent exactement au bord de la boîte, quelle
+  // que soit la taille réelle du plateau à l'écran (mobile compris).
+  const containerSizeForCube = layer.getBoundingClientRect().width || 640;
+  el.style.setProperty('--cube-half', `${(containerSizeForCube * 0.05).toFixed(1)}px`);
 
   if (reducedMotion) {
     el.style.transform = 'translate(-50%, -50%) rotateZ(0deg)';
@@ -81,7 +113,7 @@ export function throwDie(layer, die, opts = {}) {
   // le point de départ (proche du centre) et la position finale du dé.
   const dx = pct(start.x - die.x);
   const dy = pct(start.y - die.y);
-  const containerSize = layer.getBoundingClientRect().width || 640;
+  const containerSize = containerSizeForCube;
   const dxPx = (dx / 100) * containerSize;
   const dyPx = (dy / 100) * containerSize;
 
@@ -141,10 +173,11 @@ export function removeDiceExcept(layer, keepIds) {
 }
 
 /** Affiche la bannière de combinaison détectée (ex: "FULL — 400 POINTS"). */
-export function showComboBanner(banner, labelEl, pointsEl, combos) {
+export function showComboBanner(banner, labelEl, pointsEl, combos, { prefix = '' } = {}) {
   if (!combos.length) { banner.hidden = true; return; }
   const best = combos.slice().sort((a, b) => b.points - a.points)[0];
-  labelEl.textContent = combos.length > 1 ? `${combos.length} COMBINAISONS` : best.label;
+  const label = combos.length > 1 ? `${combos.length} COMBINAISONS` : best.label;
+  labelEl.textContent = `${prefix}${label}`;
   pointsEl.textContent = `${combos.reduce((s, c) => s + c.points, 0).toLocaleString('fr-FR')} POINTS`;
   banner.hidden = false;
 }

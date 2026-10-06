@@ -11,6 +11,7 @@ import {
   detectCombinations,
   calculateScore,
   checkVictory,
+  wouldOvershoot,
   BRELAN_POINTS,
   CARRE_POINTS,
   FIVE_KIND_POINTS,
@@ -230,6 +231,80 @@ test('Test 12 — Atteindre 10 000 points => victoire', () => {
   assert.equal(victory.player.name, 'Thomas');
   assert.equal(victory.player.score, 10400);
   assert.equal(g.gameOver, true);
+});
+
+// --- Test 13 : passer la main — les dés gardés sont hérités par le suivant --
+test('Test 13 — Passer la main : le joueur suivant hérite des dés gardés, pas des dés morts', () => {
+  const g = new GameController(['Alice', 'Bob']);
+  // Alice a gardé un brelan de 4 (3 dés) et avait 2 dés non retenus sur la table.
+  g.tableDice = [
+    { id: 'a', value: 4, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'b', value: 4, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'c', value: 4, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'd', value: 2, x: 0, y: 0, state: 'dead', selected: false },
+    { id: 'e', value: 6, x: 0, y: 0, state: 'dead', selected: false },
+  ];
+  g.bankScore(); // Alice sécurise 400 et passe la main à Bob
+  assert.equal(g.players[0].score, 400);
+  assert.equal(g.currentPlayer.name, 'Bob');
+  assert.equal(g.pendingInherited.length, 3, 'seuls les 3 dés gardés doivent être hérités, pas les 2 morts');
+  assert.deepEqual(g.pendingInherited.map((d) => d.value).sort(), [4, 4, 4]);
+
+  // Quand Bob lance, il ne relance que 5-3=2 dés ; les 3 hérités gardent leur valeur.
+  g.roll();
+  assert.equal(g.tableDice.length, 5);
+  const fourCount = g.tableDice.filter((d) => d.value === 4).length;
+  assert.ok(fourCount >= 3, 'les 3 dés hérités (valeur 4) doivent toujours être présents');
+  assert.equal(g.isBust, false, 'un lancer qui hérite déjà d\'une combinaison valable ne peut pas être un tour perdu');
+  assert.equal(g.pendingInherited.length, 0, 'les dés hérités sont consommés après le roll()');
+});
+
+test('Test 13bis — Dés chauds (5 dés utilisés) : rien n\'est hérité, le suivant repart à zéro', () => {
+  const g = new GameController(['Alice', 'Bob']);
+  g.tableDice = [1, 2, 3, 4, 5].map((v, i) => ({ id: `d${i}`, value: v, x: 0, y: 0, state: 'scorable', selected: true }));
+  g.bankScore(); // suite complète, les 5 dés ont servi
+  assert.equal(g.pendingInherited.length, 0);
+});
+
+// --- Test 14 : il faut tomber PILE sur 10 000, jamais dépasser -------------
+test('Test 14 — wouldOvershoot : vrai seulement si on dépasse strictement 10 000', () => {
+  // À 9600, +400 tombe pile (10000) : autorisé.
+  assert.equal(wouldOvershoot(9600, 0, 400), false);
+  // À 9600, +600 dépasse (10600) : refusé.
+  assert.equal(wouldOvershoot(9600, 0, 600), true);
+  // Les points du tour en cours comptent aussi dans le total.
+  assert.equal(wouldOvershoot(9000, 500, 500), false); // 9000+500+500=10000 pile
+  assert.equal(wouldOvershoot(9000, 500, 600), true); // 10100 : refusé
+  // Loin de l'objectif : jamais de souci.
+  assert.equal(wouldOvershoot(0, 0, 4000), false);
+});
+
+test('Test 14bis — roll() déclenche un tour perdu automatique si la combinaison dépasserait 10 000', () => {
+  const g = new GameController(['Alice', 'Bob']);
+  g.players[0].score = 9600; // il ne lui faut plus que 400 pile
+  let bustEvent = null;
+  g.on('bust', (e) => { bustEvent = e; });
+
+  // On simule directement ce que roll() aurait détecté : un brelan de 6
+  // (600 points) qui dépasserait l'objectif de 9600+600=10200.
+  g.tableDice = [
+    { id: 'a', value: 6, x: 0, y: 0, state: 'scorable', selected: false },
+    { id: 'b', value: 6, x: 0, y: 0, state: 'scorable', selected: false },
+    { id: 'c', value: 6, x: 0, y: 0, state: 'scorable', selected: false },
+  ];
+  const detection = detectCombinations([{ value: 6 }, { value: 6 }, { value: 6 }]);
+  const comboValue = calculateScore(detection.combos);
+  assert.equal(comboValue, 600);
+  const overshoot = wouldOvershoot(g.players[0].score, g.turnScore, comboValue);
+  assert.equal(overshoot, true, 'un brelan de 6 (600) doit dépasser le besoin exact de 400');
+
+  // Reproduit la décision prise par roll() dans ce cas : tour perdu immédiat.
+  g.isOvershoot = overshoot;
+  g._loseTurn();
+  assert.ok(bustEvent);
+  assert.equal(bustEvent.isOvershoot, true);
+  assert.equal(g.players[0].score, 9600, 'le score déjà sécurisé ne bouge pas');
+  assert.equal(g.currentPlayerIndex, 1, 'la main passe bien au joueur suivant');
 });
 
 // --- Bonus : calculateScore additionne bien plusieurs combos ----------------

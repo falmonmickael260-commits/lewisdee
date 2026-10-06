@@ -566,6 +566,26 @@ button {
   transform-style: preserve-3d;
   backface-visibility: hidden;
 }
+/* Vrai cube 3D : 6 faces positionnées dans l'espace (translateZ + rotation),
+   pas un simple plan qu'on penche — pendant la culbute du lancer, on voit
+   donc réellement des faces adjacentes se présenter, comme un vrai dé. */
+.die-cube {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+.cube-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+.cube-face.face-front  { transform: translateZ(var(--cube-half, 30px)); }
+.cube-face.face-back   { transform: rotateY(180deg) translateZ(var(--cube-half, 30px)); filter: brightness(0.74); }
+.cube-face.face-right  { transform: rotateY(90deg) translateZ(var(--cube-half, 30px)); filter: brightness(0.9); }
+.cube-face.face-left   { transform: rotateY(-90deg) translateZ(var(--cube-half, 30px)); filter: brightness(0.86); }
+.cube-face.face-top    { transform: rotateX(90deg) translateZ(var(--cube-half, 30px)); filter: brightness(1.08); }
+.cube-face.face-bottom { transform: rotateX(-90deg) translateZ(var(--cube-half, 30px)); filter: brightness(0.7); }
+
 .die .die-face {
   width: 100%; height: 100%;
   border-radius: 22%;

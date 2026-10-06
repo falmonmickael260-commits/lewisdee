@@ -175,6 +175,18 @@ export function checkVictory(score) {
 }
 
 /**
+ * Il faut atteindre 10 000 JUSTE, jamais dépasser : vrai si ajouter
+ * `comboPoints` au score déjà sécurisé (`currentScore`) et aux points du
+ * tour en cours (`turnScore`) ferait dépasser l'objectif. Dans ce cas la
+ * combinaison obtenue ne peut pas être gardée — c'est un tour perdu
+ * automatique (voir GameController.roll()), même sans dépasser lui-même
+ * la limite si le joueur n'avait rien d'autre à perdre.
+ */
+export function wouldOvershoot(currentScore, turnScore, comboPoints, target = WINNING_SCORE) {
+  return currentScore + turnScore + comboPoints > target;
+}
+
+/**
  * Formatte un nombre avec des espaces comme séparateurs de milliers
  * (style français : 10 000).
  */
