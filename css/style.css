@@ -61,7 +61,11 @@ body {
   font-family: var(--font-body);
   color: var(--ink);
   background:
+    /* même ambiance de salle que la table de jeu, partagée par tous les écrans */
+    radial-gradient(ellipse 60% 42% at 50% 6%, rgba(255,205,130,0.16), transparent 62%),
     radial-gradient(ellipse at 50% 20%, rgba(255,200,120,0.08), transparent 60%),
+    radial-gradient(ellipse 70% 100% at 50% 60%, transparent 55%, rgba(0,0,0,0.32) 100%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.012) 0 2px, transparent 2px 64px),
     radial-gradient(ellipse at 50% 100%, var(--room-bg-1), var(--room-bg-2) 75%);
   min-height: 100vh;
   overflow-x: hidden;
@@ -130,9 +134,14 @@ button {
 }
 
 .btn-primary {
-  background: linear-gradient(180deg, var(--gold-soft), var(--gold));
+  background: linear-gradient(180deg, var(--gold-soft), var(--gold) 55%, #cc9a35);
   color: #241705;
-  box-shadow: 0 10px 24px rgba(232,184,75,0.28), inset 0 1px 0 rgba(255,255,255,0.5);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+  box-shadow:
+    0 10px 24px rgba(232,184,75,0.28),
+    0 2px 2px rgba(0,0,0,0.18),
+    inset 0 1.5px 0 rgba(255,255,255,0.65),
+    inset 0 -2px 3px rgba(120,78,10,0.3);
 }
 .btn-primary:hover { filter: brightness(1.06); transform: translateY(-1px); }
 
@@ -250,16 +259,28 @@ button {
 /* ---------------------------------------------------------------- Panels */
 
 .panel {
+  position: relative;
   width: min(92vw, 460px);
-  background: linear-gradient(180deg, var(--panel-bg-2), var(--panel-bg));
+  background:
+    radial-gradient(ellipse 140% 60% at 50% -10%, rgba(255,210,140,0.08), transparent 60%),
+    linear-gradient(180deg, var(--panel-bg-2), var(--panel-bg));
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: var(--radius-lg);
   padding: 22px 24px 28px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,0.06);
   display: flex;
   flex-direction: column;
   gap: 14px;
   max-height: 88vh;
+  overflow: hidden;
+}
+/* Liseré doré en haut du panneau — même langage visuel que le rebord de la table. */
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(232,184,75,0.55), transparent);
 }
 .panel-scroll { overflow-y: auto; }
 .panel h2 {
@@ -267,6 +288,7 @@ button {
   color: var(--gold-soft);
   margin: 0 0 4px;
   font-size: 26px;
+  text-shadow: 0 2px 12px rgba(232,184,75,0.18);
 }
 
 .setup-count {
@@ -547,18 +569,29 @@ button {
 .die .die-face {
   width: 100%; height: 100%;
   border-radius: 22%;
-  background: linear-gradient(155deg, var(--die-face), var(--die-face-2));
+  background:
+    radial-gradient(ellipse at 28% 22%, rgba(255,255,255,0.9), transparent 42%),
+    linear-gradient(155deg, var(--die-face), var(--die-face-2) 60%, #e4d9bd 100%);
   box-shadow:
     0 10px 18px rgba(0,0,0,0.45),
-    inset 0 1px 0 rgba(255,255,255,0.8),
-    inset 0 -3px 5px rgba(0,0,0,0.12);
+    0 2px 3px rgba(0,0,0,0.3),
+    inset 0 1.5px 0 rgba(255,255,255,0.95),
+    inset 0 -4px 6px rgba(0,0,0,0.16),
+    inset 0 0 0 1px rgba(255,255,255,0.35);
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(3, 1fr);
   padding: 16%;
   transition: box-shadow .18s ease;
 }
-.pip { border-radius: 50%; background: var(--die-pip); width: 60%; height: 60%; align-self: center; justify-self: center; opacity: 0; }
+.pip {
+  border-radius: 50%;
+  width: 60%; height: 60%;
+  align-self: center; justify-self: center;
+  opacity: 0;
+  background: radial-gradient(circle at 35% 30%, #4a3c28, var(--die-pip) 65%);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.4);
+}
 /* pip layout per face using grid areas (3x3) */
 .pip.p1 { grid-column: 2; grid-row: 2; }
 .pip.p2 { grid-column: 1; grid-row: 1; }
@@ -764,6 +797,32 @@ button {
   background: radial-gradient(circle, rgba(232,184,75,0.4), transparent 70%);
   z-index: -1;
   animation: trophy-glow 2s ease-in-out infinite;
+}
+/* Rayons de lumière qui tournent lentement derrière le trophée. */
+.victory-trophy::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 280px; height: 280px;
+  transform: translate(-50%, -50%);
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg, rgba(244,212,136,0.22) 6deg, transparent 16deg,
+    transparent 40deg, rgba(244,212,136,0.16) 46deg, transparent 56deg,
+    transparent 85deg, rgba(244,212,136,0.22) 91deg, transparent 101deg,
+    transparent 130deg, rgba(244,212,136,0.14) 136deg, transparent 146deg,
+    transparent 175deg, rgba(244,212,136,0.22) 181deg, transparent 191deg,
+    transparent 220deg, rgba(244,212,136,0.16) 226deg, transparent 236deg,
+    transparent 265deg, rgba(244,212,136,0.22) 271deg, transparent 281deg,
+    transparent 310deg, rgba(244,212,136,0.14) 316deg, transparent 326deg
+  );
+  z-index: -2;
+  animation: trophy-rays 14s linear infinite;
+  mix-blend-mode: screen;
+}
+@keyframes trophy-rays {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
 }
 @keyframes trophy-glow {
   0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(0.9); }
