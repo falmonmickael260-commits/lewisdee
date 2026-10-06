@@ -24,6 +24,17 @@ export const PLAYABLE_RADIUS = 360;
 export const DIE_COLLISION_RADIUS = 130;
 export const DIE_EDGE_MARGIN = 60; // marge par rapport au bord du plateau (rayon d'un dé + confort)
 
+// Zone réservée au texte de la bannière de combinaison / tour perdu (elle
+// s'affiche en haut du plateau, voir .combo-banner / .bust-banner en CSS).
+// Un dé qui atterrit dessous se retrouve visuellement coupé par le texte —
+// on exclut donc cette zone des positions possibles.
+const BANNER_KEEP_OUT = { xMin: 260, xMax: 740, yMin: 70, yMax: 300 };
+
+function inBannerZone(p) {
+  return p.x >= BANNER_KEEP_OUT.xMin && p.x <= BANNER_KEEP_OUT.xMax
+    && p.y >= BANNER_KEEP_OUT.yMin && p.y <= BANNER_KEEP_OUT.yMax;
+}
+
 /** Distance euclidienne entre deux points. */
 function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -59,7 +70,7 @@ export function generateDicePositions(count, obstacles = [], seedOffset = 0) {
       attempts++;
       const candidate = randomPointInDisc(BOARD_CENTER.x, BOARD_CENTER.y, usableRadius);
       const tooClose = allObstacles.some((o) => dist(candidate, o) < minSpacing);
-      if (!tooClose) placed = candidate;
+      if (!tooClose && !inBannerZone(candidate)) placed = candidate;
     }
     if (!placed) {
       // Espace trop contraint : on relâche progressivement la distance minimale
