@@ -6,11 +6,27 @@
  * setSoundEnabled() (voir le réglage "Sons" de l'écran Paramètres).
  */
 
-let enabled = true;
+const STORAGE_KEY = '10000-sound-enabled';
+
+function readStoredPreference() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored === null ? true : stored === '1';
+  } catch {
+    return true; // stockage indisponible (navigation privée, etc.) : son activé par défaut
+  }
+}
+
+let enabled = readStoredPreference();
 let ctx = null;
 let noiseBuffer = null;
 
-export function setSoundEnabled(v) { enabled = v; }
+export function isSoundEnabled() { return enabled; }
+
+export function setSoundEnabled(v) {
+  enabled = v;
+  try { localStorage.setItem(STORAGE_KEY, v ? '1' : '0'); } catch { /* tant pis, pas bloquant */ }
+}
 
 function getContext() {
   if (ctx) return ctx;

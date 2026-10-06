@@ -6,7 +6,7 @@
 import { GameController } from './game.js';
 import { openLobby } from './net.js';
 import * as UI from './ui.js';
-import { setSoundEnabled } from './sound.js';
+import { setSoundEnabled, isSoundEnabled } from './sound.js';
 
 // ------------------------------------------------------------------ DOM refs
 const screens = {};
@@ -35,9 +35,30 @@ const AVATAR_ICONS = ['🦊', '🐺', '🦁', '🐯'];
 document.getElementById('toggle-reduced-motion').addEventListener('change', (e) => {
   UI.setReducedMotion(e.target.checked);
 });
-document.getElementById('toggle-sound').addEventListener('change', (e) => {
-  setSoundEnabled(e.target.checked);
-});
+
+// Réglage du son : synchronisé entre la case à cocher des Paramètres et le
+// petit bouton haut-parleur accessible directement pendant la partie (les
+// Paramètres ne sont pas joignables une fois en jeu sans quitter). Le choix
+// est mémorisé (voir sound.js) et déjà appliqué au chargement de la page.
+const toggleSoundEl = document.getElementById('toggle-sound');
+const btnMuteGame = document.getElementById('btn-mute-game');
+
+function applySoundState(soundOn) {
+  toggleSoundEl.checked = soundOn;
+  btnMuteGame.textContent = soundOn ? '🔊' : '🔇';
+  btnMuteGame.classList.toggle('is-muted', !soundOn);
+  btnMuteGame.title = soundOn ? 'Couper le son' : 'Activer le son';
+}
+
+function setSound(soundOn) {
+  setSoundEnabled(soundOn);
+  applySoundState(soundOn);
+}
+
+toggleSoundEl.addEventListener('change', (e) => setSound(e.target.checked));
+btnMuteGame.addEventListener('click', () => setSound(!isSoundEnabled()));
+
+applySoundState(isSoundEnabled()); // reflète la préférence mémorisée dès le départ
 
 // ------------------------------------------------------------------ Setup local
 let playerCount = 2;

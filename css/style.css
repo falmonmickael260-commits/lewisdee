@@ -428,10 +428,9 @@ button {
   mix-blend-mode: screen;
 }
 
-.btn-quit {
+.btn-quit, .btn-mute {
   position: absolute;
   top: max(14px, env(safe-area-inset-top));
-  right: 16px;
   z-index: 40;
   width: 36px; height: 36px;
   border-radius: 999px;
@@ -439,7 +438,12 @@ button {
   color: var(--ink-dim);
   font-size: 16px;
   display: flex; align-items: center; justify-content: center;
+  transition: background .15s ease, transform .15s ease;
 }
+.btn-quit { right: 16px; }
+.btn-mute { right: 60px; font-size: 15px; }
+.btn-quit:active, .btn-mute:active { transform: scale(0.92); }
+.btn-mute.is-muted { color: var(--ink-dim); opacity: 0.6; }
 
 /* Players around the table */
 .players-ring {
@@ -574,7 +578,13 @@ button {
   inset: 0;
   transform-style: preserve-3d;
 }
-.cube-face {
+/* Spécificité volontairement plus élevée (.die .die-cube .cube-face) que
+   ".die .die-face" plus bas : sinon ce dernier (même spécificité à 2
+   classes) l'emporte selon l'ordre dans la feuille de style et repasse
+   ces faces en position "relative" — elles s'empilent alors dans le flux
+   normal du document au lieu d'être positionnées dans l'espace 3D. C'est
+   exactement le bug qui donnait des dés "en traînée" sur la table. */
+.die .die-cube .cube-face {
   position: absolute;
   inset: 0;
   backface-visibility: hidden;

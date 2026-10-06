@@ -56,7 +56,7 @@ function buildDieCube(value) {
   cube.className = 'die-cube';
   const values = cubeFaceValues(value);
   for (const [faceName, faceValue] of Object.entries(values)) {
-    cube.appendChild(buildDieFace(faceValue, `face-${faceName}`));
+    cube.appendChild(buildDieFace(faceValue, `cube-face face-${faceName}`));
   }
   return cube;
 }
