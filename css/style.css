@@ -442,6 +442,7 @@ button {
 }
 .btn-quit { right: 16px; }
 .btn-mute { right: 60px; font-size: 15px; }
+#btn-rules-game { right: 104px; font-size: 15px; }
 .btn-quit:active, .btn-mute:active { transform: scale(0.92); }
 .btn-mute.is-muted { color: var(--ink-dim); opacity: 0.6; }
 

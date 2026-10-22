@@ -12,7 +12,7 @@
 import { GameController } from '../js/game.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans 0/O/1/I, pour éviter les confusions à l'oral
-const MAX_PLAYERS = 4;
+const MAX_PLAYERS = 6;
 
 function makeCode(existingCodes) {
   let code;
@@ -160,7 +160,7 @@ export class RoomManager {
       return null;
     }
     if (room.members.length >= MAX_PLAYERS) {
-      ws.send(JSON.stringify({ type: 'error', message: 'Salon complet (4 joueurs maximum).' }));
+      ws.send(JSON.stringify({ type: 'error', message: `Salon complet (${MAX_PLAYERS} joueurs maximum).` }));
       return null;
     }
     const member = room.addMember(ws, name);

@@ -18,7 +18,13 @@ function showScreen(id) {
   screens[id].classList.add('active');
 }
 
+// L'écran des règles est accessible depuis le menu ET depuis une partie en
+// cours (bouton 📖 dans le HUD) : son bouton "retour" doit alors ramener à
+// la partie, pas au menu (qui n'a aucun moyen de "reprendre" une partie).
+let rulesReturnScreen = 'screen-menu';
+
 document.querySelectorAll('[data-back]').forEach((btn) => {
+  if (btn.id === 'btn-rules-back') return; // câblé séparément plus bas
   btn.addEventListener('click', () => showScreen(btn.dataset.back));
 });
 
@@ -26,12 +32,20 @@ document.querySelectorAll('[data-back]').forEach((btn) => {
 document.getElementById('btn-play-local').addEventListener('click', () => showScreen('screen-setup'));
 document.getElementById('btn-create-room').addEventListener('click', () => openOnlineScreen('create'));
 document.getElementById('btn-join-room').addEventListener('click', () => openOnlineScreen('join'));
-document.getElementById('btn-rules').addEventListener('click', () => showScreen('screen-rules'));
+document.getElementById('btn-rules').addEventListener('click', () => {
+  rulesReturnScreen = 'screen-menu';
+  showScreen('screen-rules');
+});
 document.getElementById('btn-settings').addEventListener('click', () => showScreen('screen-settings'));
+document.getElementById('btn-rules-game').addEventListener('click', () => {
+  rulesReturnScreen = 'screen-game';
+  showScreen('screen-rules');
+});
+document.getElementById('btn-rules-back').addEventListener('click', () => showScreen(rulesReturnScreen));
 
 // ------------------------------------------------------------------ Réglages
-const DEFAULT_NAMES = ['Thomas', 'Mickaël', 'Julie', 'Sarah'];
-const AVATAR_ICONS = ['🦊', '🐺', '🦁', '🐯'];
+const DEFAULT_NAMES = ['Thomas', 'Mickaël', 'Julie', 'Sarah', 'Lucas', 'Chloé'];
+const AVATAR_ICONS = ['🦊', '🐺', '🦁', '🐯', '🐻', '🦉'];
 
 document.getElementById('toggle-reduced-motion').addEventListener('change', (e) => {
   UI.setReducedMotion(e.target.checked);
