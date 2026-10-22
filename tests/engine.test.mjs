@@ -73,13 +73,16 @@ test('Test 3 — Carré 4-4-4-4-2 => 800 points, le 2 ne rapporte rien', () => {
   assert.equal(deadIds.length, 1);
 });
 
-// --- Test 4 : full ---------------------------------------------------------
-test('Test 4 — Full : calcul brelan + 50×paire', () => {
+// --- Test 4 : full -----------------------------------------------------
+// Le Full rapporte uniquement la valeur du brelan (pas de bonus pour la
+// paire) : ça garde le total toujours multiple de 100, jamais bloquant
+// pour tomber pile sur 10 000.
+test('Test 4 — Full : rapporte la valeur du brelan, sans bonus pour la paire', () => {
   const cases = [
-    { values: [3, 3, 3, 2, 2], expected: 400 },
-    { values: [3, 3, 3, 5, 5], expected: 550 },
-    { values: [6, 6, 6, 4, 4], expected: 800 },
-    { values: [1, 1, 1, 5, 5], expected: 1250 },
+    { values: [3, 3, 3, 2, 2], expected: 300 },
+    { values: [3, 3, 3, 5, 5], expected: 300 },
+    { values: [6, 6, 6, 4, 4], expected: 600 },
+    { values: [1, 1, 1, 5, 5], expected: 1000 },
   ];
   for (const { values, expected } of cases) {
     const { combos } = detectCombinations(dice(values));

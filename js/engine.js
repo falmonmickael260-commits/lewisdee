@@ -16,7 +16,6 @@ export const BRELAN_POINTS = { 1: 1000, 2: 200, 3: 300, 4: 400, 5: 500, 6: 600 }
 export const CARRE_POINTS = { 1: 2000, 2: 400, 3: 600, 4: 800, 5: 1000, 6: 1200 };
 export const FIVE_KIND_POINTS = { 1: 4000, 2: 800, 3: 1200, 4: 1600, 5: 2000, 6: 2400 };
 export const STRAIGHT_POINTS = 1500;
-export const PAIR_MULTIPLIER = 50;
 export const WINNING_SCORE = 10000;
 
 // ---------------------------------------------------------------------------
@@ -112,7 +111,11 @@ export function detectCombinations(dice) {
       if (counts[v] === 2) pairValue = v;
     }
     if (brelanValue != null && pairValue != null) {
-      const points = BRELAN_POINTS[brelanValue] + PAIR_MULTIPLIER * pairValue;
+      // Le Full rapporte la valeur du brelan, sans bonus pour la paire : un
+      // bonus variable (ex. 50 × valeur de la paire) donnait des totaux pas
+      // toujours multiples de 100, ce qui bloquait trop souvent le joueur
+      // qui doit retomber PILE sur 10 000 (règle "10 000 juste").
+      const points = BRELAN_POINTS[brelanValue];
       combos.push({
         type: 'full-house',
         dieIds: [...groups[brelanValue], ...groups[pairValue]],
