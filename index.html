@@ -97,14 +97,16 @@
 
       <div class="rules-content">
         <p><strong>But du jeu</strong> — Le premier joueur qui atteint ou dépasse <strong>10&nbsp;000 points</strong> gagne.</p>
-        <p><strong>Un tour</strong> — Vous lancez 5 dés. Si aucune combinaison n'apparaît, le tour est immédiatement perdu (0 point). Dans cette variante, <strong>un 1 seul ou un 5 seul ne valent rien</strong> : seules les combinaisons ci-dessous comptent.</p>
-        <p><strong>Garder / relancer</strong> — Touchez les dés d'une combinaison pour la conserver. Vous pouvez ensuite sécuriser vos points ou relancer les dés restants pour tenter d'en gagner plus — au risque de tout perdre si la relance ne donne aucune combinaison.</p>
-        <p><strong>Dés chauds</strong> — Si les 5 dés participent à une combinaison, vous récupérez les 5 dés et pouvez continuer à relancer.</p>
+        <p><strong>Un tour</strong> — Vous lancez 5 dés, <strong>2 lancers maximum par tour</strong>. Si un lancer ne contient aucune combinaison valable, le tour est immédiatement perdu (points provisoires envolés).</p>
+        <p><strong>Garder / relancer</strong> — Touchez les dés d'une combinaison pour la conserver : ils restent bloqués, seuls les dés rejetés sont relancés au 2<sup>e</sup> lancer (dans la limite des 2 lancers). Vous pouvez ensuite sécuriser vos points, ou relancer si un lancer vous reste.</p>
+        <p><strong>Sécuriser un total rond</strong> — Un 5 isolé vaut 50 points et permet de continuer, mais <strong>un total qui n'est pas un multiple de 100 ne peut pas être sécurisé</strong> (ex. un seul 5 = 50, impossible à sécuriser seul ; deux 5 = 100, sécurisable).</p>
 
         <table class="rules-table">
           <thead><tr><th>Combinaison</th><th>Points</th></tr></thead>
           <tbody>
-            <tr><td>1 seul / 5 seul</td><td>0</td></tr>
+            <tr><td>1 seul</td><td>0</td></tr>
+            <tr><td>5 seul</td><td>50 (non sécurisable seul)</td></tr>
+            <tr><td>Deux 5</td><td>100</td></tr>
             <tr><td>Brelan 1-1-1</td><td>1 000</td></tr>
             <tr><td>Brelan 2-2-2</td><td>200</td></tr>
             <tr><td>Brelan 3-3-3</td><td>300</td></tr>
@@ -291,6 +293,10 @@
           <div class="hud-score">
             <span class="hud-label">SCORE</span>
             <span class="hud-value" id="hud-score">0</span>
+          </div>
+          <div class="hud-rolls">
+            <span class="hud-label">LANCER</span>
+            <span class="hud-value" id="hud-rolls">1/2</span>
           </div>
           <div class="hud-turn">
             <span class="hud-label">POINTS DU TOUR</span>

@@ -11,7 +11,8 @@
  * commune, js/main.js peut piloter une partie locale ou une partie en
  * ligne avec exactement le même code d'affichage.
  */
-import { detectCombinations, calculateScore } from './engine.js';
+import { detectCombinations, calculateScore, WINNING_SCORE } from './engine.js';
+import { MAX_ROLLS_PER_TURN } from './game.js';
 
 function wsUrl() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -31,6 +32,7 @@ export class RemoteController {
     this.isBust = false;
     this.pendingInherited = [];
     this.pendingInheritedValue = 0;
+    this.rollsThisTurn = 0;
     this.gameOver = false;
     this.winner = null;
     this.listeners = {};
@@ -65,6 +67,12 @@ export class RemoteController {
 
   get canAct() { return this._selectedPoints() > 0; }
   get bankable() { return this.turnScore + this._selectedPoints(); }
+  get canReroll() { return this.canAct && this.rollsThisTurn < MAX_ROLLS_PER_TURN; }
+  get canBank() {
+    if (!this.canAct) return false;
+    if (this.bankable % 100 !== 0) return false;
+    return this.currentPlayer.score + this.bankable <= WINNING_SCORE;
+  }
 
   _send(payload) {
     if (this.socket.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(payload));

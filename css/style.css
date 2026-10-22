@@ -815,6 +815,8 @@ button {
   100% { transform: scale(1); }
 }
 .hud-score { text-align: center; }
+.hud-rolls { text-align: center; }
+.hud-rolls .hud-value { font-size: 17px; }
 .hud-turn { text-align: right; }
 .hud-top {
   animation: hud-in .4s cubic-bezier(.22,1,.36,1);

@@ -23,6 +23,12 @@ export const STRAIGHT_POINTS = 1500;
 // aussi le total toujours multiple de 100, jamais bloquant pour tomber
 // pile sur 10 000.
 export const FULL_HOUSE_BONUS = 100;
+// Un 5 isolé (pas assez pour un brelan) vaut 50 points — permet de
+// continuer à jouer, mais voir GameController.canBank : on ne peut
+// sécuriser que des totaux multiples de 100, donc un 5 tout seul ne
+// suffit jamais à lui seul pour sécuriser (il en faut deux, ou le combiner
+// à d'autres points déjà acquis ce tour-ci).
+export const SINGLE_FIVE_POINTS = 50;
 export const WINNING_SCORE = 10000;
 
 // ---------------------------------------------------------------------------
@@ -69,9 +75,10 @@ function groupByValue(dice) {
  *  - usesAllDice: true si l'intégralité des dés lancés fait partie d'UNE
  *    combinaison (déclenche la règle "dés chauds" / relance des 5 dés)
  *
- * Règles de ce variant : un 1 isolé ou un 5 isolé ne valent RIEN. Seules
- * les combinaisons suivantes rapportent des points : brelan (3), carré (4),
- * cinq identiques (5), full (3+2), suite (1-5 ou 2-6).
+ * Règles de ce variant : un 1 isolé ne vaut rien, mais un 5 isolé vaut 50
+ * points (deux 5 valent donc 100). Les autres combinaisons qui rapportent
+ * des points : brelan (3), carré (4), cinq identiques (5), full (3+2),
+ * suite (1-5 ou 2-6).
  */
 export function detectCombinations(dice) {
   const n = dice.length;
@@ -156,6 +163,18 @@ export function detectCombinations(dice) {
         points: BRELAN_POINTS[v],
         label: 'BRELAN',
         values: [v],
+      });
+    } else if (v === 5 && counts[v] >= 1) {
+      // 1 ou 2 "5" isolés (pas assez pour un brelan) : 50 points chacun.
+      // Ne peuvent jamais, à eux seuls, former un total sécurisable (voir
+      // GameController.canBank, qui exige un multiple de 100) — mais
+      // comptent comme une combinaison valable : le tour n'est pas perdu.
+      combos.push({
+        type: 'single-five',
+        dieIds: [...groups[v]],
+        points: SINGLE_FIVE_POINTS * counts[v],
+        label: counts[v] === 1 ? 'UN 5' : 'DEUX 5',
+        values: [5],
       });
     }
   }

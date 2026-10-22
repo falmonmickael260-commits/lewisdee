@@ -3,7 +3,7 @@
  * configuration de la partie locale, câblage de l'UI au GameController.
  */
 
-import { GameController } from './game.js';
+import { GameController, MAX_ROLLS_PER_TURN } from './game.js';
 import { openLobby } from './net.js';
 import * as UI from './ui.js';
 import { setSoundEnabled, isSoundEnabled } from './sound.js';
@@ -205,6 +205,7 @@ const el = {
   playerName: document.getElementById('hud-player-name'),
   score: document.getElementById('hud-score'),
   turnPoints: document.getElementById('hud-turn-points'),
+  rollsCount: document.getElementById('hud-rolls'),
   btnRoll: document.getElementById('btn-roll'),
   btnReroll: document.getElementById('btn-reroll'),
   btnBank: document.getElementById('btn-bank'),
@@ -286,14 +287,21 @@ function updateHud() {
   el.playerName.textContent = p.name;
   UI.animateNumber(el.score, p.score);
   UI.animateNumber(el.turnPoints, controller.bankable, { prefix: '+', duration: 260 });
+  el.rollsCount.textContent = `${controller.rollsThisTurn}/${MAX_ROLLS_PER_TURN}`;
 }
 
 function updateActionAvailability() {
-  const canAct = controller.canAct;
-  el.btnReroll.disabled = !canAct;
-  el.btnBank.disabled = !canAct;
-  el.btnReroll.style.opacity = canAct ? 1 : 0.45;
-  el.btnBank.style.opacity = canAct ? 1 : 0.45;
+  // RELANCER et SÉCURISER ont chacun leurs propres conditions : on peut
+  // RELANCER tant qu'il reste un lancer disponible (2 maximum par tour),
+  // mais on ne peut SÉCURISER que si le total est un multiple de 100 (un 5
+  // isolé à 50 points, par exemple, permet de continuer mais pas de
+  // sécuriser) et ne dépasse pas 10 000.
+  const canReroll = controller.canReroll;
+  const canBank = controller.canBank;
+  el.btnReroll.disabled = !canReroll;
+  el.btnBank.disabled = !canBank;
+  el.btnReroll.style.opacity = canReroll ? 1 : 0.45;
+  el.btnBank.style.opacity = canBank ? 1 : 0.45;
   el.bankAmount.textContent = controller.bankable.toLocaleString('fr-FR');
 }
 
@@ -349,7 +357,7 @@ function wireController(ctrl) {
     controller.tableDice.forEach((d) => UI.markDieState(el.diceLayer, d.id, d));
   });
 
-  ctrl.on('bust', ({ lost, wasFirstRoll, isOvershoot, isNoImprovement }) => {
+  ctrl.on('bust', ({ lost, wasFirstRoll, isOvershoot, isNoImprovement, isCannotSecure }) => {
     el.btnRoll.hidden = true;
     el.btnReroll.hidden = true;
     el.btnBank.hidden = true;
@@ -367,9 +375,11 @@ function wireController(ctrl) {
         ? 'Trop de points : il faut tomber pile sur 10 000.'
         : isNoImprovement
           ? 'Combinaison non améliorée : la main reprise ne rapporte rien.'
-          : wasFirstRoll
-            ? 'Aucune combinaison au premier lancer.'
-            : `${lost.toLocaleString('fr-FR')} points perdus.`;
+          : isCannotSecure
+            ? 'Dernier lancer : total non arrondi (multiple de 100 requis), main perdue.'
+            : wasFirstRoll
+              ? 'Aucune combinaison au premier lancer.'
+              : `${lost.toLocaleString('fr-FR')} points perdus.`;
       UI.hideComboBanner(el.comboBanner);
       UI.showBustBanner(el.bustBanner, el.bustSub, msg);
       UI.clearDeadDiceFade(el.diceLayer, deadIds);
@@ -468,13 +478,13 @@ el.btnNewHand.addEventListener('click', () => {
 });
 
 el.btnReroll.addEventListener('click', () => {
-  if (!controller || !controller.canAct || !isMyTurn()) return;
+  if (!controller || !controller.canReroll || !isMyTurn()) return;
   captureUnlockedOrigins();
   controller.reroll(); // émet diceLocked/hotDice puis readyToReroll (qui relance automatiquement)
 });
 
 el.btnBank.addEventListener('click', () => {
-  if (!controller || !controller.canAct || !isMyTurn()) return;
+  if (!controller || !controller.canBank || !isMyTurn()) return;
   controller.bankScore();
 });
 

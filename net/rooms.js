@@ -40,6 +40,9 @@ function snapshot(controller) {
     // silence côté serveur.
     pendingInherited: controller.pendingInherited,
     pendingInheritedValue: controller.pendingInheritedValue,
+    // Nécessaire pour que le client sache combien de lancers il lui reste
+    // (2 maximum par tour, sans exception — voir MAX_ROLLS_PER_TURN).
+    rollsThisTurn: controller.rollsThisTurn,
   };
 }
 

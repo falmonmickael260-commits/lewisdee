@@ -16,8 +16,9 @@ import {
   CARRE_POINTS,
   FIVE_KIND_POINTS,
   STRAIGHT_POINTS,
+  SINGLE_FIVE_POINTS,
 } from '../js/engine.js';
-import { GameController } from '../js/game.js';
+import { GameController, MAX_ROLLS_PER_TURN } from '../js/game.js';
 
 let passed = 0;
 let failed = 0;
@@ -222,7 +223,7 @@ test('Test 12 — Atteindre 10 000 points => victoire', () => {
   assert.equal(checkVictory(10250), true);
 
   const g = new GameController(['Thomas', 'Julie']);
-  g.players[0].score = 9600;
+  g.players[0].score = 9200; // + 800 (carré de 4) = 10 000 PILE
   g.turnScore = 0;
   g.tableDice = [
     { id: 'a', value: 4, x: 0, y: 0, state: 'scorable', selected: true },
@@ -233,9 +234,9 @@ test('Test 12 — Atteindre 10 000 points => victoire', () => {
   let victory = null;
   g.on('victory', (e) => (victory = e));
   g.bankScore();
-  assert.ok(victory);
+  assert.ok(victory, 'bankScore() doit réussir : 9200 + 800 = 10 000 pile, jamais bloqué par canBank');
   assert.equal(victory.player.name, 'Thomas');
-  assert.equal(victory.player.score, 10400);
+  assert.equal(victory.player.score, 10000);
   assert.equal(g.gameOver, true);
 });
 
@@ -601,6 +602,189 @@ test('Test 23 — reroll() appelé deux fois de suite ne verrouille pas les dés
   assert.equal(g.committedDice.length, 3, 'un second reroll() immédiat ne doit pas dupliquer le verrouillage');
   const ids = g.committedDice.map((d) => d.id);
   assert.equal(new Set(ids).size, ids.length, 'aucun dé ne doit être verrouillé deux fois');
+});
+
+// =============================================================================
+// SECTION "2 LANCERS MAX + 5 ISOLÉ = 50 PTS" (demande explicite du 2026-10-23)
+// =============================================================================
+
+// --- Test 25 : un seul 5 vaut 50 points, permet de continuer mais pas de sécuriser seul ---
+test('Test 25 — Un 5 isolé vaut 50 points : permet de continuer, mais ne peut pas être sécurisé seul', () => {
+  const g = new GameController(['A', 'B']);
+  g.tableDice = [
+    { id: 'a', value: 5, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'b', value: 2, x: 0, y: 0, state: 'dead', selected: false },
+    { id: 'c', value: 3, x: 0, y: 0, state: 'dead', selected: false },
+    { id: 'd', value: 4, x: 0, y: 0, state: 'dead', selected: false },
+    { id: 'e', value: 6, x: 0, y: 0, state: 'dead', selected: false },
+  ];
+  const { combos, isBust } = detectCombinations(g.tableDice.filter((d) => d.selected).map((d) => ({ id: d.id, value: d.value })));
+  assert.equal(isBust, false, 'un 5 isolé est une combinaison valable, pas un bust');
+  assert.equal(combos[0].points, SINGLE_FIVE_POINTS);
+  assert.equal(g.canAct, true, 'la sélection est valable : le joueur peut continuer (relancer)');
+  assert.equal(g.bankable, 50);
+  assert.equal(g.canBank, false, '50 points ne sont PAS un multiple de 100 : impossible de sécuriser seul');
+  g.bankScore(); // doit être un no-op, canBank est false
+  assert.equal(g.players[0].score, 0, 'bankScore() ne doit rien faire tant que canBank est false');
+});
+
+// --- Test 26 : deux 5 valent 100 points et peuvent être sécurisés ---
+test('Test 26 — Deux 5 valent 100 points et peuvent être sécurisés', () => {
+  const g = new GameController(['A', 'B']);
+  g.tableDice = [
+    { id: 'a', value: 5, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'b', value: 5, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'c', value: 2, x: 0, y: 0, state: 'dead', selected: false },
+    { id: 'd', value: 3, x: 0, y: 0, state: 'dead', selected: false },
+    { id: 'e', value: 6, x: 0, y: 0, state: 'dead', selected: false },
+  ];
+  assert.equal(g.bankable, 100);
+  assert.equal(g.canBank, true, '100 est un multiple de 100 : sécurisable');
+  g.bankScore();
+  assert.equal(g.players[0].score, 100);
+  assert.equal(g.currentPlayer.name, 'B', 'le tour passe bien au joueur suivant après sécurisation');
+});
+
+// --- Test 27 : un brelan de 4 conservé puis complété par un 4ème 4 devient un carré ---
+test('Test 27 — Un brelan de 4 conservé puis complété par un 4ème 4 devient un carré de 4 (800 pts)', () => {
+  const g = new GameController(['A', 'B']);
+  // Premier lancer : brelan de 4 + 2 dés morts. Le joueur garde le brelan et relance les 2 autres.
+  g.tableDice = [
+    { id: 'a', value: 4, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'b', value: 4, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'c', value: 4, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'd', value: 2, x: 0, y: 0, state: 'dead', selected: false },
+    { id: 'e', value: 6, x: 0, y: 0, state: 'dead', selected: false },
+  ];
+  g.reroll(); // verrouille a,b,c (brelan de 4) ; d,e ne sont PAS conservés
+  assert.equal(g.committedDice.length, 3);
+  assert.deepEqual(g.committedDice.map((d) => d.id).sort(), ['a', 'b', 'c']);
+  assert.equal(g.turnScore, 400, 'le brelan de 4 est provisoirement acquis (400 pts)');
+  // Capturé AVANT le roll() suivant : un roll() qui busterait viderait
+  // committedDice (perte du tour) — ce n'est pas ce que ce test vérifie,
+  // on garde donc une copie figée des 3 dés conservés.
+  const committedBefore = g.committedDice.map((d) => ({ id: d.id, value: d.value }));
+
+  // Deuxième lancer : seuls les 2 dés rejetés (d, e) sont relancés — on force
+  // ici le résultat (un 4ème 4) pour un test déterministe, sans dépendre du
+  // hasard réel (déjà vérifié ailleurs avec de vrais lancers).
+  let rolledPayload = null;
+  g.on('rolled', (e) => { rolledPayload = e; });
+  g.roll();
+  assert.equal(rolledPayload.dice.length, 2, 'seuls les 2 dés rejetés sont relancés, pas les 5');
+  // On remplace manuellement la valeur du dé fraîchement lancé par un 4,
+  // puis on refait tourner la même détection que roll() aurait faite.
+  const freshDie = { id: rolledPayload.dice[0].id, value: 4 };
+  const combinedWithFourthFour = [...committedBefore, freshDie];
+  const detection = detectCombinations(combinedWithFourthFour);
+  assert.equal(detection.combos[0].type, 'carre');
+  assert.equal(detection.combos[0].points, CARRE_POINTS[4]);
+  assert.equal(detection.combos[0].points, 800);
+});
+
+// --- Test 28 : les dés conservés ne sont jamais relancés, seuls les dés rejetés le sont ---
+test('Test 28 — Les dés conservés (committedDice) ne sont jamais relancés : leur valeur reste figée', () => {
+  // On relance jusqu'à obtenir un 2e lancer qui NE busте PAS (sinon
+  // committedDice est légitimement vidé par la perte du tour — comportement
+  // déjà couvert ailleurs, pas ce que ce test vérifie).
+  let observed = false;
+  for (let i = 0; i < 300 && !observed; i++) {
+    const g = new GameController(['A', 'B']);
+    g.tableDice = [
+      { id: 'a', value: 6, x: 0, y: 0, state: 'scorable', selected: true },
+      { id: 'b', value: 6, x: 0, y: 0, state: 'scorable', selected: true },
+      { id: 'c', value: 6, x: 0, y: 0, state: 'scorable', selected: true },
+      { id: 'd', value: 1, x: 0, y: 0, state: 'dead', selected: false },
+      { id: 'e', value: 2, x: 0, y: 0, state: 'dead', selected: false },
+    ];
+    g.reroll(); // garde a,b,c (brelan de 6), rejette d,e
+    const valuesBefore = g.committedDice.map((d) => ({ id: d.id, value: d.value }));
+
+    let rolledPayload = null;
+    g.on('rolled', (e) => { rolledPayload = e; });
+    g.roll();
+    if (rolledPayload.isBust) continue; // retente : ce run-là a busté, pas pertinent ici
+
+    observed = true;
+    // Les dés conservés ne doivent JAMAIS apparaître dans le nouveau lancer.
+    const rolledIds = rolledPayload.dice.map((d) => d.id);
+    for (const kept of valuesBefore) {
+      assert.ok(!rolledIds.includes(kept.id), `le dé conservé ${kept.id} ne doit jamais être relancé`);
+    }
+    assert.equal(rolledPayload.dice.length, 2, 'seuls les 2 dés rejetés (d, e) sont relancés');
+    // Et leur valeur n'a pas bougé dans committedDice.
+    const valuesAfter = g.committedDice.map((d) => ({ id: d.id, value: d.value }));
+    assert.deepEqual(valuesAfter, valuesBefore, 'la valeur des dés conservés ne doit jamais changer');
+  }
+  assert.ok(observed, 'un 2e lancer non perdant devrait survenir au moins une fois sur 300 essais');
+});
+
+// --- Test 29 : un tour ne peut jamais dépasser MAX_ROLLS_PER_TURN lancers ---
+test('Test 29 — Le joueur ne peut jamais effectuer plus de 2 lancers par tour', () => {
+  assert.equal(MAX_ROLLS_PER_TURN, 2);
+  // On relance jusqu'à obtenir une séquence "lancer 1 (non perdant) -> tout
+  // garder -> lancer 2 (non perdant)" : c'est le seul cas qui permet de
+  // vérifier qu'un 3e lancer est bien refusé (sinon le tour est déjà fini
+  // avant même d'atteindre la limite — déjà couvert par d'autres tests).
+  let observed = false;
+  for (let i = 0; i < 300 && !observed; i++) {
+    const g = new GameController(['A', 'B']);
+    let rollCount = 0;
+    let lastRolled = null;
+    g.on('rolled', (e) => { rollCount += 1; lastRolled = e; });
+
+    g.roll(); // lancer 1/2
+    if (lastRolled.isBust) continue;
+    assert.equal(lastRolled.rollsThisTurn, 1);
+
+    g.tableDice.forEach((d) => { d.selected = d.state === 'scorable'; });
+    if (!g.canReroll) continue; // plus rien à relancer (cas rare : dés chauds en 1 lancer)
+    g.reroll();
+    g.roll(); // lancer 2/2
+    if (lastRolled.isBust) continue;
+
+    observed = true;
+    assert.equal(lastRolled.rollsThisTurn, 2);
+    assert.equal(rollCount, 2);
+    assert.equal(g.canReroll, false, 'plus aucun lancer ne doit être proposé après le 2e');
+
+    // Une 3e tentative de roll() ne doit RIEN faire : aucun événement 'rolled' de plus.
+    g.roll();
+    assert.equal(rollCount, 2, 'un 3e roll() ne doit jamais être exécuté, quel que soit le contexte');
+  }
+  assert.ok(observed, 'une séquence de 2 lancers non perdants devrait survenir au moins une fois sur 300 essais');
+});
+
+// --- Test 30 : dernier lancer non arrondi => main perdue, score déjà sécurisé intact ---
+test('Test 30 — Dernier lancer avec un total non multiple de 100 => main perdue, score déjà sécurisé intact', () => {
+  // On relance jusqu'à obtenir, au 2e (et dernier) lancer, une combinaison
+  // valable dont le total n'est PAS un multiple de 100 (typiquement un
+  // unique 5 isolé parmi les dés neufs, rien d'autre ne scorant).
+  let observed = false;
+  for (let i = 0; i < 500 && !observed; i++) {
+    const g = new GameController(['A', 'B']);
+    g.players[0].score = 500; // déjà sécurisé lors d'un tour précédent
+    let lastRolled = null;
+    let bustEvent = null;
+    g.on('rolled', (e) => { lastRolled = e; });
+    g.on('bust', (e) => { bustEvent = e; });
+
+    g.roll(); // lancer 1/2
+    if (lastRolled.isBust) continue;
+    g.tableDice.forEach((d) => { d.selected = d.state === 'scorable'; });
+    if (!g.canReroll) continue;
+    g.reroll();
+    g.roll(); // lancer 2/2 (dernier)
+
+    if (!lastRolled.isCannotSecure) continue; // retente : ce run n'a pas produit ce cas précis
+
+    observed = true;
+    assert.equal(lastRolled.isBust, true, 'dernier lancer, total non rond : la main doit être perdue');
+    assert.equal(bustEvent?.isCannotSecure, true);
+    assert.equal(g.players[0].score, 500, 'le score déjà sécurisé avant ce tour reste intact');
+    assert.equal(g.currentPlayer.name, 'B', 'le tour passe au joueur suivant');
+  }
+  assert.ok(observed, 'le cas "dernier lancer non arrondi" devrait survenir au moins une fois sur 500 essais');
 });
 
 console.log(`\n==================================`);
