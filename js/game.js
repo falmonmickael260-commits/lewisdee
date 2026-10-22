@@ -62,6 +62,14 @@ export class GameController {
     // combiner les deux pour une plus grosse combinaison. Consommé au tout
     // prochain roll().
     this.pendingInherited = [];
+    // Valeur de la combinaison héritée (ce qu'elle valait déjà pour le
+    // joueur précédent). Sert à détecter si le joueur qui reprend la main a
+    // RÉELLEMENT amélioré la combinaison avec ses dés neufs : les points
+    // déjà sécurisés par le joueur précédent ne sont JAMAIS récupérables —
+    // si le résultat ne dépasse pas cette valeur, ce n'est pas une
+    // amélioration et le joueur qui reprend la main ne gagne rien.
+    this.pendingInheritedValue = 0;
+    this.isNoImprovement = false;
     this.listeners = {};
   }
 
@@ -80,6 +88,24 @@ export class GameController {
     return this.players[this.currentPlayerIndex];
   }
 
+  /** Vrai si une main du joueur précédent attend d'être reprise ou refusée. */
+  get hasPendingInheritance() {
+    return this.pendingInherited.length > 0;
+  }
+
+  /**
+   * Le joueur refuse explicitement de reprendre la main précédente : il
+   * repart sur une main entièrement neuve (5 dés), sans aucun risque ni
+   * aucun bénéfice lié à la combinaison laissée par le joueur précédent.
+   * Doit être appelé AVANT roll() — sinon roll() aurait automatiquement
+   * fusionné les dés hérités avec le lancer.
+   */
+  declineInheritance() {
+    this.pendingInherited = [];
+    this.pendingInheritedValue = 0;
+    this.emit('inheritanceDeclined', {});
+  }
+
   /**
    * Lance les dés disponibles (5 au début du tour, ou moins si des dés sont
    * conservés ce tour-ci — ou hérités du joueur précédent, voir
@@ -89,7 +115,9 @@ export class GameController {
   roll() {
     if (this.gameOver) return;
     const inherited = this.pendingInherited;
+    const inheritedValue = this.pendingInheritedValue;
     this.pendingInherited = [];
+    this.pendingInheritedValue = 0;
 
     const availableCount = 5 - this.committedDice.length - inherited.length;
     const obstacles = this.committedDice.map((d) => ({ x: d.x, y: d.y }));
@@ -123,10 +151,23 @@ export class GameController {
     const comboValue = calculateScore(detection.combos);
     const overshoot = !detection.isBust
       && wouldOvershoot(this.currentPlayer.score, this.turnScore, comboValue);
-    this.isBust = detection.isBust || overshoot;
-    this.isOvershoot = overshoot;
 
-    const scorableIds = new Set(detection.combos.flatMap((c) => c.dieIds));
+    // Main reprise : les points déjà sécurisés par le joueur précédent ne
+    // sont JAMAIS récupérables. Si les dés neufs n'améliorent pas (au sens
+    // strict : une valeur strictement supérieure) la combinaison héritée,
+    // ce n'est pas une "vraie" réussite — le joueur qui reprend la main
+    // reste bredouille et perd la main, même si la combinaison de base
+    // reste techniquement valable.
+    const noImprovement = inherited.length > 0 && !detection.isBust && comboValue <= inheritedValue;
+
+    this.isBust = detection.isBust || overshoot || noImprovement;
+    this.isOvershoot = overshoot;
+    this.isNoImprovement = noImprovement;
+
+    // En cas de tour perdu (classique, dépassement de 10 000, ou main
+    // reprise non améliorée), tous les dés restent "morts" visuellement —
+    // pas de flash doré "sélectionné" juste avant que tout disparaisse.
+    const scorableIds = this.isBust ? new Set() : new Set(detection.combos.flatMap((c) => c.dieIds));
     this.tableDice.forEach((d) => {
       d.state = scorableIds.has(d.id) ? 'scorable' : 'dead';
       // La combinaison détectée est présélectionnée automatiquement : sans
@@ -144,6 +185,7 @@ export class GameController {
       combos: this.hintCombos,
       isBust: this.isBust,
       isOvershoot: overshoot,
+      isNoImprovement: noImprovement,
       isFirstRollOfTurn: this.committedDice.length === 0 && this.turnScore === 0 && inherited.length === 0,
       inheritedCount: inherited.length,
     });
@@ -226,7 +268,11 @@ export class GameController {
 
     const scoredDice = [...this.committedDice, ...this.tableDice.filter((d) => d.selected)];
     const carry = scoredDice.length < 5 ? scoredDice.map((d) => ({ id: d.id, value: d.value })) : [];
-    this._endTurn(carry);
+    // Valeur de cette combinaison transmise "en l'état" (pas de nouveaux
+    // dés) : sert au prochain roll() à juger si les dés neufs du joueur
+    // suivant ont réellement AMÉLIORÉ la combinaison, ou pas.
+    const carryValue = carry.length > 0 ? calculateScore(detectCombinations(carry).combos) : 0;
+    this._endTurn(carry, carryValue);
   }
 
   /** Relance : verrouille les dés sélectionnés, relance le reste (ou les 5 si dés chauds). */
@@ -263,19 +309,27 @@ export class GameController {
       lost,
       wasFirstRoll: this.committedDice.length === 0 && this.turnScore === 0,
       isOvershoot: this.isOvershoot,
+      isNoImprovement: this.isNoImprovement,
     });
     this.isOvershoot = false;
+    this.isNoImprovement = false;
     this._endTurn();
   }
 
-  _endTurn(carryDice = []) {
+  _endTurn(carryDice = [], carryValue = 0) {
     this.turnScore = 0;
     this.committedDice = [];
     this.tableDice = [];
     this.hintCombos = [];
     this.pendingInherited = carryDice;
+    this.pendingInheritedValue = carryValue;
     this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
-    this.emit('turnChanged', { player: this.currentPlayer, players: this.players, inheritedCount: carryDice.length });
+    this.emit('turnChanged', {
+      player: this.currentPlayer,
+      players: this.players,
+      inheritedCount: carryDice.length,
+      inheritedValue: carryValue,
+    });
   }
 
   _ranking() {

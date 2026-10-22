@@ -29,6 +29,8 @@ export class RemoteController {
     this.committedDice = [];
     this.hintCombos = [];
     this.isBust = false;
+    this.pendingInherited = [];
+    this.pendingInheritedValue = 0;
     this.gameOver = false;
     this.winner = null;
     this.listeners = {};
@@ -49,6 +51,7 @@ export class RemoteController {
 
   get currentPlayer() { return this.players[this.currentPlayerIndex]; }
   get isMyTurn() { return this.currentPlayerIndex === this.memberId; }
+  get hasPendingInheritance() { return this.pendingInherited.length > 0; }
 
   /** Même logique que GameController._selectedPoints(), recalculée côté client
    * pour un retour instantané (boutons activés/désactivés) sans attendre le
@@ -71,6 +74,7 @@ export class RemoteController {
   toggleDie(dieId) { this._send({ type: 'action', action: 'toggleDie', dieId }); }
   reroll() { this._send({ type: 'action', action: 'reroll' }); }
   bankScore() { this._send({ type: 'action', action: 'bank' }); }
+  declineInheritance() { this._send({ type: 'action', action: 'declineInheritance' }); }
 
   /** Applique un instantané d'état reçu du serveur et émet l'événement associé. */
   applyServerMessage(msg) {

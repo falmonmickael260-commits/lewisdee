@@ -589,38 +589,48 @@ button {
   inset: 0;
   backface-visibility: hidden;
 }
+/* Éclairage doux et continu entre les faces (comme un seul matériau lisse
+   vu sous différents angles), plutôt que des facettes contrastées façon
+   "cube basique" — l'écart de luminosité entre faces reste subtil. */
 .cube-face.face-front  { transform: translateZ(var(--cube-half, 30px)); }
-.cube-face.face-back   { transform: rotateY(180deg) translateZ(var(--cube-half, 30px)); filter: brightness(0.74); }
-.cube-face.face-right  { transform: rotateY(90deg) translateZ(var(--cube-half, 30px)); filter: brightness(0.9); }
-.cube-face.face-left   { transform: rotateY(-90deg) translateZ(var(--cube-half, 30px)); filter: brightness(0.86); }
-.cube-face.face-top    { transform: rotateX(90deg) translateZ(var(--cube-half, 30px)); filter: brightness(1.08); }
-.cube-face.face-bottom { transform: rotateX(-90deg) translateZ(var(--cube-half, 30px)); filter: brightness(0.7); }
+.cube-face.face-back   { transform: rotateY(180deg) translateZ(var(--cube-half, 30px)); filter: brightness(0.88); }
+.cube-face.face-right  { transform: rotateY(90deg) translateZ(var(--cube-half, 30px)); filter: brightness(0.96); }
+.cube-face.face-left   { transform: rotateY(-90deg) translateZ(var(--cube-half, 30px)); filter: brightness(0.93); }
+.cube-face.face-top    { transform: rotateX(90deg) translateZ(var(--cube-half, 30px)); filter: brightness(1.04); }
+.cube-face.face-bottom { transform: rotateX(-90deg) translateZ(var(--cube-half, 30px)); filter: brightness(0.86); }
 
 .die .die-face {
   width: 100%; height: 100%;
-  border-radius: 22%;
+  /* Coins nettement arrondis, façon dé en résine moderne plutôt qu'un cube
+     aux arêtes vives. */
+  border-radius: 26%;
   background:
-    radial-gradient(ellipse at 28% 22%, rgba(255,255,255,0.9), transparent 42%),
-    linear-gradient(155deg, var(--die-face), var(--die-face-2) 60%, #e4d9bd 100%);
+    radial-gradient(ellipse at 26% 20%, rgba(255,255,255,0.95), transparent 46%),
+    radial-gradient(ellipse at 78% 88%, rgba(0,0,0,0.05), transparent 55%),
+    linear-gradient(155deg, var(--die-face), var(--die-face-2) 55%, #e6dbbf 100%);
   box-shadow:
-    0 10px 18px rgba(0,0,0,0.45),
-    0 2px 3px rgba(0,0,0,0.3),
+    /* ombre portée au sol — le dé "pose" vraiment sur la table */
+    0 11px 16px rgba(0,0,0,0.4),
+    0 3px 4px rgba(0,0,0,0.28),
+    /* biseau d'arête : liseré clair fin en haut, ombre fine en bas */
     inset 0 1.5px 0 rgba(255,255,255,0.95),
-    inset 0 -4px 6px rgba(0,0,0,0.16),
-    inset 0 0 0 1px rgba(255,255,255,0.35);
+    inset 0 -3px 4px rgba(0,0,0,0.14),
+    /* contour net qui délimite proprement la géométrie du dé */
+    inset 0 0 0 1px rgba(255,255,255,0.4),
+    inset 0 0 0 2.5px rgba(120,100,70,0.1);
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(3, 1fr);
-  padding: 16%;
+  padding: 17%;
   transition: box-shadow .18s ease;
 }
 .pip {
   border-radius: 50%;
-  width: 60%; height: 60%;
+  width: 58%; height: 58%;
   align-self: center; justify-self: center;
   opacity: 0;
-  background: radial-gradient(circle at 35% 30%, #4a3c28, var(--die-pip) 65%);
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.4);
+  background: radial-gradient(circle at 32% 28%, #51402a, var(--die-pip) 60%);
+  box-shadow: inset 0 1.5px 2px rgba(0,0,0,0.5), inset 0 -0.5px 0 rgba(0,0,0,0.3), 0 0.5px 0 rgba(255,255,255,0.45);
 }
 /* pip layout per face using grid areas (3x3) */
 .pip.p1 { grid-column: 2; grid-row: 2; }
@@ -798,6 +808,26 @@ button {
 
 .hud-actions { display: flex; gap: 10px; }
 .hud-actions .btn { flex: 1; }
+
+/* Choix "Continuer la main / Nouvelle main" */
+.inheritance-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(232,184,75,0.08);
+  border: 1px solid rgba(232,184,75,0.3);
+  border-radius: 16px;
+  padding: 12px 14px;
+  animation: hud-in .4s cubic-bezier(.22,1,.36,1);
+}
+.inheritance-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+.inheritance-note strong { color: var(--gold-soft); }
+#inheritance-points { color: var(--ink); font-weight: 700; }
 
 /* ---------------------------------------------------------------- Victory */
 

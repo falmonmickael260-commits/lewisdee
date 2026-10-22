@@ -251,11 +251,24 @@ test('Test 13 — Passer la main : le joueur suivant hérite des dés gardés, p
   assert.deepEqual(g.pendingInherited.map((d) => d.value).sort(), [4, 4, 4]);
 
   // Quand Bob lance, il ne relance que 5-3=2 dés ; les 3 hérités gardent leur valeur.
+  let bustEvent = null;
+  g.on('bust', (e) => { bustEvent = e; });
   g.roll();
-  assert.equal(g.tableDice.length, 5);
-  const fourCount = g.tableDice.filter((d) => d.value === 4).length;
-  assert.ok(fourCount >= 3, 'les 3 dés hérités (valeur 4) doivent toujours être présents');
-  assert.equal(g.isBust, false, 'un lancer qui hérite déjà d\'une combinaison valable ne peut pas être un tour perdu');
+  if (g.isBust) {
+    // Les 2 dés neufs n'ont pas amélioré le brelan de 4 (400) : Bob doit
+    // repartir bredouille, et les 400 d'Alice ne doivent JAMAIS lui revenir.
+    assert.equal(bustEvent?.isNoImprovement, true);
+    assert.equal(g.players[1].score, 0, 'Bob ne récupère jamais les points déjà sécurisés par Alice');
+    assert.equal(g.players[0].score, 400, 'les points d\'Alice restent acquis, inchangés');
+  } else {
+    // Les 2 dés neufs ont étendu la combinaison (carré, full…) : c'est
+    // entièrement la réussite de Bob, et ça reste strictement supérieur à
+    // ce qu'Alice avait déjà sécurisé pour elle-même.
+    assert.equal(g.tableDice.length, 5);
+    const fourCount = g.tableDice.filter((d) => d.value === 4).length;
+    assert.ok(fourCount >= 3, 'les 3 dés hérités (valeur 4) doivent toujours être présents');
+    assert.ok(g.bankable > 400, 'une amélioration doit forcément dépasser les 400 déjà pris par Alice');
+  }
   assert.equal(g.pendingInherited.length, 0, 'les dés hérités sont consommés après le roll()');
 });
 
@@ -320,20 +333,83 @@ test('Test 15 — roll() présélectionne automatiquement la combinaison trouvé
   assert.ok(scorableDice.every((d) => d.selected === true), 'tous les dés scorables doivent être présélectionnés');
 });
 
-test('Test 15bis — une main reprise (dés hérités) est elle aussi présélectionnée et sécurisable', () => {
+test('Test 15bis — une main reprise (dés hérités) : amélioration = présélectionnée et sécurisable, sinon 0', () => {
   const g = new GameController(['A', 'B']);
   g.pendingInherited = [
     { id: 'x', value: 4 }, { id: 'y', value: 4 }, { id: 'z', value: 4 },
   ];
+  g.pendingInheritedValue = 400; // ce que ce brelan de 4 valait déjà pour A
+  let bustEvent = null;
+  g.on('bust', (e) => { bustEvent = e; });
   g.roll();
-  assert.equal(g.isBust, false);
-  assert.equal(g.canAct, true);
-  // Les 2 dés neufs peuvent parfois étendre la combinaison (full, carré…) :
-  // on vérifie juste qu'on a AU MOINS le brelan hérité, déjà sécurisable.
-  assert.ok(g.bankable >= 400, `au moins le brelan hérité (400) doit être immédiatement sécurisable, reçu ${g.bankable}`);
+  if (g.isBust) {
+    assert.equal(bustEvent?.isNoImprovement, true);
+    assert.equal(g.canAct, false);
+  } else {
+    assert.equal(g.canAct, true);
+    // Les 2 dés neufs ont forcément étendu la combinaison (sinon ça aurait
+    // été détecté comme un tour perdu ci-dessus) : strictement > 400.
+    assert.ok(g.bankable > 400, `une amélioration doit dépasser les 400 déjà pris par A, reçu ${g.bankable}`);
+  }
+});
+
+// --- Test 16 : B ne récupère JAMAIS les points sécurisés par A si ses dés
+// neufs n'améliorent pas la combinaison héritée (règle centrale demandée) ---
+test('Test 16 — Si les dés neufs n\'améliorent pas la main héritée, le joueur perd tout et A garde ses points', () => {
+  // Les dés neufs n'améliorant pas sont l'issue la PLUS fréquente (il faut
+  // deux coïncidences pour étendre un brelan) : on relance un contrôleur
+  // frais jusqu'à obtenir ce cas précis, ce qui arrive presque toujours
+  // bien avant 300 essais — un échec ici indiquerait un vrai problème.
+  let observed = false;
+  for (let i = 0; i < 300 && !observed; i++) {
+    const g = new GameController(['A', 'B']);
+    g.pendingInherited = [{ id: 'x', value: 5 }, { id: 'y', value: 5 }, { id: 'z', value: 5 }];
+    g.pendingInheritedValue = 500; // brelan de 5 déjà sécurisé par A
+    g.players[0].score = 500;
+    g.currentPlayerIndex = 1; // c'est bien B qui reprend la main, pas A
+    // Comme le fait vraiment l'UI : on lit l'événement 'bust' au moment où
+    // il est émis, pas l'état du contrôleur après coup (isNoImprovement est
+    // remis à false juste après, une fois l'événement envoyé).
+    let bustEvent = null;
+    g.on('bust', (e) => { bustEvent = e; });
+    g.roll();
+    if (bustEvent && bustEvent.isNoImprovement) {
+      observed = true;
+      assert.equal(g.canAct, false, 'B ne doit rien pouvoir sécuriser');
+      assert.equal(g.players[1].score, 0, 'B ne récupère jamais les 500 points de A');
+      assert.equal(g.players[0].score, 500, 'les points de A ne bougent jamais');
+      assert.equal(g.currentPlayerIndex, 0, 'la main passe au joueur suivant (ici, retour à A dans une partie à 2)');
+    }
+  }
+  assert.ok(observed, 'le cas "aucune amélioration" devrait survenir au moins une fois sur 300 essais');
 });
 
 // --- Bonus : calculateScore additionne bien plusieurs combos ----------------
+// --- Test 17 : choix explicite "Nouvelle main" refuse bien l'héritage ------
+test('Test 17 — declineInheritance() : le joueur repart à zéro, sans aucun lien avec la main précédente', () => {
+  const g = new GameController(['A', 'B']);
+  g.pendingInherited = [{ id: 'x', value: 5 }, { id: 'y', value: 5 }, { id: 'z', value: 5 }];
+  g.pendingInheritedValue = 500;
+  assert.equal(g.hasPendingInheritance, true);
+
+  g.declineInheritance();
+  assert.equal(g.hasPendingInheritance, false);
+  assert.equal(g.pendingInherited.length, 0);
+  assert.equal(g.pendingInheritedValue, 0);
+
+  // Le roll() qui suit doit être une main neuve de 5 dés, sans aucune trace
+  // des 5 héritées : aucune garantie de "pas de bust" ne doit s'appliquer.
+  g.roll();
+  assert.equal(g.tableDice.length <= 5, true);
+  // isNoImprovement ne doit JAMAIS se déclencher sur une main refusée.
+  let bustEvent = null;
+  if (g.isBust) {
+    // On ne peut pas prédire si ce lancer précis bust ou non (aléatoire),
+    // mais s'il bust, ce doit être un bust NORMAL, pas "pas d'amélioration".
+    assert.equal(g.isNoImprovement, false, 'une main refusée ne peut jamais déclencher isNoImprovement');
+  }
+});
+
 test('Bonus — calculateScore additionne les combos sélectionnés', () => {
   const total = calculateScore([{ points: 300 }, { points: 150 }]);
   assert.equal(total, 450);

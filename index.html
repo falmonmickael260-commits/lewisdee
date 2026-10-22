@@ -295,7 +295,22 @@
           </div>
         </div>
 
-        <div class="hud-actions">
+        <!-- Choix explicite quand une main précédente peut être reprise : le
+             joueur doit décider AVANT tout lancer — jamais de récupération
+             automatique des points d'un autre joueur. -->
+        <div class="inheritance-choice" id="inheritance-choice" hidden>
+          <p class="inheritance-note">
+            Main précédente : <strong id="inheritance-label"></strong>
+            <span id="inheritance-points"></span> à défendre — ces points restent
+            acquis à l'autre joueur quoi qu'il arrive.
+          </p>
+          <div class="hud-actions">
+            <button class="btn btn-danger" id="btn-continue-hand">🎲 CONTINUER LA MAIN</button>
+            <button class="btn btn-ghost" id="btn-new-hand">↺ NOUVELLE MAIN</button>
+          </div>
+        </div>
+
+        <div class="hud-actions" id="normal-actions">
           <button class="btn btn-dice" id="btn-roll">🎲 LANCER</button>
           <button class="btn btn-danger" id="btn-reroll" hidden>🔴 RELANCER</button>
           <button class="btn btn-success" id="btn-bank" hidden>🟢 SÉCURISER <span id="bank-amount"></span></button>

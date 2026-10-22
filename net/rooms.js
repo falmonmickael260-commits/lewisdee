@@ -33,12 +33,20 @@ function snapshot(controller) {
     isBust: controller.isBust,
     gameOver: controller.gameOver,
     winner: controller.winner,
+    // Nécessaires pour que les clients affichent le choix "Continuer la
+    // main / Nouvelle main" : cet état persiste jusqu'à ce que le joueur
+    // décide (roll() direct = continuer, declineInheritance() = refuser),
+    // il doit donc être visible dans l'instantané, pas juste consommé en
+    // silence côté serveur.
+    pendingInherited: controller.pendingInherited,
+    pendingInheritedValue: controller.pendingInheritedValue,
   };
 }
 
 const RELAYED_EVENTS = [
   'rolled', 'selectionChanged', 'bust', 'turnChanged',
   'diceLocked', 'hotDice', 'readyToReroll', 'banked', 'victory',
+  'inheritanceDeclined',
 ];
 
 class Room {
@@ -104,6 +112,7 @@ class Room {
       case 'toggleDie': this.controller.toggleDie(msg.dieId); break;
       case 'reroll': this.controller.reroll(); break;
       case 'bank': this.controller.bankScore(); break;
+      case 'declineInheritance': this.controller.declineInheritance(); break;
       default: break;
     }
   }

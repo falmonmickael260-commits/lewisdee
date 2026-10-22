@@ -7,6 +7,7 @@ import { GameController } from './game.js';
 import { openLobby } from './net.js';
 import * as UI from './ui.js';
 import { setSoundEnabled, isSoundEnabled } from './sound.js';
+import { detectCombinations } from './engine.js';
 
 // ------------------------------------------------------------------ DOM refs
 const screens = {};
@@ -195,6 +196,12 @@ const el = {
   btnBank: document.getElementById('btn-bank'),
   bankAmount: document.getElementById('bank-amount'),
   turnBanner: document.getElementById('online-turn-banner'),
+  inheritanceChoice: document.getElementById('inheritance-choice'),
+  inheritanceLabel: document.getElementById('inheritance-label'),
+  inheritancePoints: document.getElementById('inheritance-points'),
+  normalActions: document.getElementById('normal-actions'),
+  btnContinueHand: document.getElementById('btn-continue-hand'),
+  btnNewHand: document.getElementById('btn-new-hand'),
 };
 
 let controller = null;
@@ -242,9 +249,22 @@ function updateTurnBanner() {
 }
 
 function resetActionButtons() {
+  const showChoice = controller.hasPendingInheritance && isMyTurn();
+  el.inheritanceChoice.hidden = !showChoice;
+  el.normalActions.hidden = showChoice;
+  if (showChoice) updateInheritanceChoice();
   el.btnRoll.hidden = !isMyTurn();
   el.btnReroll.hidden = true;
   el.btnBank.hidden = true;
+}
+
+/** Remplit le texte du choix "Continuer la main / Nouvelle main" (points en jeu, type de combo). */
+function updateInheritanceChoice() {
+  const values = controller.pendingInherited.map((d) => ({ id: d.id, value: d.value }));
+  const detection = detectCombinations(values);
+  const label = detection.combos[0]?.label || 'COMBINAISON';
+  el.inheritanceLabel.textContent = label;
+  el.inheritancePoints.textContent = `${controller.pendingInheritedValue.toLocaleString('fr-FR')} POINTS`;
 }
 
 function updateHud() {
@@ -310,7 +330,7 @@ function wireController(ctrl) {
     controller.tableDice.forEach((d) => UI.markDieState(el.diceLayer, d.id, d));
   });
 
-  ctrl.on('bust', ({ lost, wasFirstRoll, isOvershoot }) => {
+  ctrl.on('bust', ({ lost, wasFirstRoll, isOvershoot, isNoImprovement }) => {
     el.btnRoll.hidden = true;
     el.btnReroll.hidden = true;
     el.btnBank.hidden = true;
@@ -326,9 +346,11 @@ function wireController(ctrl) {
     setTimeout(() => {
       const msg = isOvershoot
         ? 'Trop de points : il faut tomber pile sur 10 000.'
-        : wasFirstRoll
-          ? 'Aucune combinaison au premier lancer.'
-          : `${lost.toLocaleString('fr-FR')} points perdus.`;
+        : isNoImprovement
+          ? 'Combinaison non améliorée : la main reprise ne rapporte rien.'
+          : wasFirstRoll
+            ? 'Aucune combinaison au premier lancer.'
+            : `${lost.toLocaleString('fr-FR')} points perdus.`;
       UI.hideComboBanner(el.comboBanner);
       UI.showBustBanner(el.bustBanner, el.bustSub, msg);
       UI.clearDeadDiceFade(el.diceLayer, deadIds);
@@ -407,6 +429,23 @@ el.diceLayer.addEventListener('click', (e) => {
 el.btnRoll.addEventListener('click', () => {
   if (!controller || !isMyTurn()) return;
   controller.roll();
+});
+
+// Choix explicite obligatoire quand une main précédente peut être reprise :
+// jamais de récupération automatique, le joueur doit décider AVANT de lancer.
+el.btnContinueHand.addEventListener('click', () => {
+  if (!controller || !isMyTurn() || !controller.hasPendingInheritance) return;
+  el.inheritanceChoice.hidden = true;
+  el.normalActions.hidden = false;
+  controller.roll(); // les dés hérités sont déjà en attente : ce lancer les reprend
+});
+
+el.btnNewHand.addEventListener('click', () => {
+  if (!controller || !isMyTurn() || !controller.hasPendingInheritance) return;
+  el.inheritanceChoice.hidden = true;
+  el.normalActions.hidden = false;
+  controller.declineInheritance();
+  controller.roll(); // main toute neuve : 5 dés, aucun lien avec la main précédente
 });
 
 el.btnReroll.addEventListener('click', () => {
