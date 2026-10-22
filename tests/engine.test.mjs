@@ -74,15 +74,18 @@ test('Test 3 — Carré 4-4-4-4-2 => 800 points, le 2 ne rapporte rien', () => {
 });
 
 // --- Test 4 : full -----------------------------------------------------
-// Le Full rapporte uniquement la valeur du brelan (pas de bonus pour la
-// paire) : ça garde le total toujours multiple de 100, jamais bloquant
-// pour tomber pile sur 10 000.
-test('Test 4 — Full : rapporte la valeur du brelan, sans bonus pour la paire', () => {
+// Le Full rapporte la valeur du brelan + un bonus FIXE de 100 (pas variable
+// selon la paire) : le total reste toujours multiple de 100 (jamais
+// bloquant pour tomber pile sur 10 000), ET un Full vaut toujours
+// strictement plus qu'un brelan nu de la même valeur — indispensable
+// sinon compléter un brelan hérité en Full ne compterait jamais comme une
+// amélioration (voir Test 16ter).
+test('Test 4 — Full : valeur du brelan + 100 fixe (jamais variable selon la paire)', () => {
   const cases = [
-    { values: [3, 3, 3, 2, 2], expected: 300 },
-    { values: [3, 3, 3, 5, 5], expected: 300 },
-    { values: [6, 6, 6, 4, 4], expected: 600 },
-    { values: [1, 1, 1, 5, 5], expected: 1000 },
+    { values: [3, 3, 3, 2, 2], expected: 400 },
+    { values: [3, 3, 3, 5, 5], expected: 400 },
+    { values: [6, 6, 6, 4, 4], expected: 700 },
+    { values: [1, 1, 1, 5, 5], expected: 1100 },
   ];
   for (const { values, expected } of cases) {
     const { combos } = detectCombinations(dice(values));
@@ -385,6 +388,34 @@ test('Test 16 — Si les dés neufs n\'améliorent pas la main héritée, le jou
     }
   }
   assert.ok(observed, 'le cas "aucune amélioration" devrait survenir au moins une fois sur 300 essais');
+});
+
+// --- Test 16bis : compléter un brelan hérité en FULL doit TOUJOURS compter
+// comme une amélioration, jamais comme un bust (régression du bonus fixe
+// du Full — sans lui, Full(brelan X) == Brelan(X) et ça bloquait à tort) ---
+test('Test 16bis — Compléter un brelan hérité en Full compte comme une amélioration, pas un bust', () => {
+  let observed = false;
+  for (let i = 0; i < 2000 && !observed; i++) {
+    const g = new GameController(['A', 'B']);
+    g.currentPlayerIndex = 1;
+    g.pendingInherited = [{ id: 'x', value: 4 }, { id: 'y', value: 4 }, { id: 'z', value: 4 }];
+    g.pendingInheritedValue = 400; // brelan de 4 déjà sécurisé par A
+    g.players[0].score = 400;
+
+    let rolledPayload = null;
+    g.on('rolled', (e) => { rolledPayload = e; });
+    g.roll();
+
+    const isFullHouseCase = !g.isBust && rolledPayload.combos.some((c) => c.type === 'full-house');
+    if (!isFullHouseCase) continue;
+
+    observed = true;
+    assert.equal(g.isBust, false, 'un Full qui complète le brelan hérité ne doit jamais être un bust');
+    assert.equal(g.isNoImprovement, false);
+    assert.ok(g.bankable > 400, `le Full doit rapporter strictement plus que les 400 hérités, reçu ${g.bankable}`);
+    assert.equal(g.canAct, true);
+  }
+  assert.ok(observed, 'le cas "brelan hérité complété en Full" devrait survenir au moins une fois sur 2000 essais');
 });
 
 // --- Bonus : calculateScore additionne bien plusieurs combos ----------------

@@ -16,6 +16,13 @@ export const BRELAN_POINTS = { 1: 1000, 2: 200, 3: 300, 4: 400, 5: 500, 6: 600 }
 export const CARRE_POINTS = { 1: 2000, 2: 400, 3: 600, 4: 800, 5: 1000, 6: 1200 };
 export const FIVE_KIND_POINTS = { 1: 4000, 2: 800, 3: 1200, 4: 1600, 5: 2000, 6: 2400 };
 export const STRAIGHT_POINTS = 1500;
+// Bonus FIXE (pas variable selon la valeur de la paire, voir historique) :
+// un Full doit toujours valoir STRICTEMENT plus qu'un brelan nu de la même
+// valeur (sinon compléter un brelan hérité en Full ne compte jamais comme
+// une "amélioration" et déclenche un tour perdu à tort). Rester fixe garde
+// aussi le total toujours multiple de 100, jamais bloquant pour tomber
+// pile sur 10 000.
+export const FULL_HOUSE_BONUS = 100;
 export const WINNING_SCORE = 10000;
 
 // ---------------------------------------------------------------------------
@@ -111,11 +118,15 @@ export function detectCombinations(dice) {
       if (counts[v] === 2) pairValue = v;
     }
     if (brelanValue != null && pairValue != null) {
-      // Le Full rapporte la valeur du brelan, sans bonus pour la paire : un
-      // bonus variable (ex. 50 × valeur de la paire) donnait des totaux pas
-      // toujours multiples de 100, ce qui bloquait trop souvent le joueur
-      // qui doit retomber PILE sur 10 000 (règle "10 000 juste").
-      const points = BRELAN_POINTS[brelanValue];
+      // Le Full rapporte la valeur du brelan + un bonus FIXE (pas variable
+      // selon la paire, voir FULL_HOUSE_BONUS) : un bonus variable (ex.
+      // 50 × valeur de la paire) donnait des totaux pas toujours multiples
+      // de 100, ce qui bloquait trop souvent le joueur qui doit retomber
+      // PILE sur 10 000. Le bonus reste indispensable : sans lui, un Full
+      // qui complète un brelan hérité de la MÊME valeur vaudrait exactement
+      // autant que ce brelan, ce qui ne compterait jamais comme une
+      // "amélioration" et ferait perdre la main à tort.
+      const points = BRELAN_POINTS[brelanValue] + FULL_HOUSE_BONUS;
       combos.push({
         type: 'full-house',
         dieIds: [...groups[brelanValue], ...groups[pairValue]],
