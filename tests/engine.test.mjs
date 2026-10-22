@@ -415,6 +415,160 @@ test('Bonus — calculateScore additionne les combos sélectionnés', () => {
   assert.equal(total, 450);
 });
 
+// --- Test 18 : main pleine (hot dice) -> continuer -> bust : points provisoires perdus, score déjà sécurisé intact ---
+test('Test 18 — Main pleine : continuer au risque de tout perdre, puis échec => points provisoires perdus, score déjà sécurisé intact', () => {
+  const g = new GameController(['A', 'B']);
+  g.players[0].score = 1000; // points déjà sécurisés AVANT cette main
+  g.turnScore = 0;
+  g.committedDice = [];
+
+  // Lancer qui utilise les 5 dés dans une combinaison valable (suite) : main pleine.
+  const rolled = dice([1, 2, 3, 4, 5]);
+  const { usesAllDice } = detectCombinations(rolled);
+  assert.equal(usesAllDice, true);
+  g.tableDice = rolled.map((d) => ({ id: d.id, value: d.value, x: 0, y: 0, state: 'scorable', selected: true }));
+
+  // Le joueur choisit de CONTINUER plutôt que de sécuriser : reroll() doit
+  // déclencher "dés chauds" (5 dés neufs), rien n'est perdu pour l'instant.
+  let hot = null;
+  g.on('hotDice', (e) => { hot = e; });
+  g.reroll();
+  assert.ok(hot, 'reroll() sur une main pleine doit déclencher hotDice, pas un bust');
+  assert.equal(g.turnScore, 1500, 'les points de la suite restent provisoires (turnScore), pas encore sécurisés');
+  assert.equal(g.committedDice.length, 0, 'main pleine : les 5 dés sont "rendus", pas verrouillés');
+  assert.equal(g.players[0].score, 1000, 'le score sécurisé ne bouge pas tant que rien n\'est banké');
+
+  // Le lancer suivant échoue (aucune combinaison) : on simule directement
+  // l'échec (comportement de roll() déjà vérifié ailleurs avec de vrais
+  // lancers), pour un test déterministe qui ne dépend pas du hasard.
+  g._loseTurn();
+  assert.equal(g.players[0].score, 1000, 'les points déjà sécurisés AVANT cette main restent intacts');
+  assert.equal(g.turnScore, 0, 'les points provisoires de cette main sont bien perdus');
+  assert.equal(g.currentPlayer.name, 'B', 'le tour passe au joueur suivant après l\'échec');
+});
+
+// --- Test 19 : main pleine -> sécuriser directement (au lieu de continuer) ---
+test('Test 19 — Main pleine : sécuriser directement ajoute les points au score et termine le tour', () => {
+  const g = new GameController(['A', 'B']);
+  g.players[0].score = 200;
+  g.turnScore = 300; // points provisoires d'un leg précédent dans le même tour
+  const rolled = dice([2, 3, 4, 5, 6]); // suite
+  g.tableDice = rolled.map((d) => ({ id: d.id, value: d.value, x: 0, y: 0, state: 'scorable', selected: true }));
+  g.bankScore();
+  assert.equal(g.players[0].score, 200 + 300 + 1500, 'score = déjà acquis + provisoire du tour + la suite');
+  assert.equal(g.currentPlayer.name, 'B');
+});
+
+// --- Test 20 : les dés hérités sont marqués "carried", pas les dés fraîchement lancés ---
+test('Test 20 — roll() marque les dés hérités comme "carried", jamais les dés neufs', () => {
+  const g = new GameController(['Alice', 'Bob']);
+  g.currentPlayerIndex = 1;
+  g.pendingInherited = [{ id: 'x', value: 4 }, { id: 'y', value: 4 }, { id: 'z', value: 4 }];
+  g.pendingInheritedValue = 400;
+  // On lit le tableau de dés au moment précis de l'événement 'rolled' : si ce
+  // lancer échoue (les 2 dés neufs n'améliorent pas le brelan hérité),
+  // _loseTurn() vide ensuite g.tableDice — ce qui est normal et ne doit pas
+  // être confondu avec un bug du marquage "carried".
+  let rolledDice = null;
+  g.on('rolled', (e) => { rolledDice = e.dice; });
+  g.roll();
+  assert.equal(rolledDice.length, 5);
+  const carriedIds = rolledDice.filter((d) => d.carried).map((d) => d.id).sort();
+  assert.deepEqual(carriedIds, ['x', 'y', 'z'], 'seuls les 3 dés hérités doivent porter le marqueur "carried"');
+  const freshDice = rolledDice.filter((d) => !['x', 'y', 'z'].includes(d.id));
+  assert.equal(freshDice.length, 2);
+  assert.ok(freshDice.every((d) => !d.carried), 'les dés fraîchement lancés ne doivent jamais être marqués "carried"');
+});
+
+// --- Test 21 : le nombre de dés disponibles est conservé d'un joueur à l'autre ---
+test('Test 21 — Le nombre de dés disponibles est conservé entre les joueurs (5 - dés hérités)', () => {
+  const g = new GameController(['Alice', 'Bob']);
+  g.tableDice = [
+    { id: 'a', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'b', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'c', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'd', value: 1, x: 0, y: 0, state: 'dead', selected: false },
+    { id: 'e', value: 6, x: 0, y: 0, state: 'dead', selected: false },
+  ];
+  g.bankScore(); // Alice garde 3 dés (brelan de 3), les 2 autres sont perdus
+  assert.equal(g.pendingInherited.length, 3);
+  // Comme au Test 20 : on capture le lancer au moment de l'événement, pas
+  // après coup (un échec "pas d'amélioration" viderait sinon g.tableDice).
+  let rolledDice = null;
+  g.on('rolled', (e) => { rolledDice = e.dice; });
+  g.roll(); // Bob ne doit (re)lancer QUE les 2 dés restants
+  assert.equal(rolledDice.length, 5, 'Bob voit bien 5 dés au total : 3 hérités + 2 relancés');
+  const freshCount = rolledDice.filter((d) => !d.carried).length;
+  assert.equal(freshCount, 2, 'seuls 2 dés neufs doivent être réellement relancés, pas 5');
+});
+
+// --- Test 22 : une action ne peut pas être exécutée deux fois (double clic / appel immédiat) ---
+test('Test 22 — bankScore() appelé deux fois de suite ne crédite les points qu\'une seule fois', () => {
+  const g = new GameController(['Alice', 'Bob']);
+  // Brelan de 2 (200 pts) : un 1 ou un 5 isolé ne vaut RIEN dans ce variant
+  // (voir engine.js), il faut une vraie combinaison pour que canAct soit vrai.
+  g.tableDice = [
+    { id: 'a', value: 2, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'b', value: 2, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'c', value: 2, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'd', value: 1, x: 0, y: 0, state: 'dead', selected: false },
+    { id: 'e', value: 6, x: 0, y: 0, state: 'dead', selected: false },
+  ];
+  g.bankScore(); // brelan de 2 = 200 points
+  assert.equal(g.players[0].score, 200);
+  // "Double clic" : un second appel immédiat ne doit RIEN faire, car l'état
+  // du tour a déjà été remis à zéro par le premier appel (plus aucun dé
+  // sélectionné à sécuriser : canAct devient false).
+  g.bankScore();
+  assert.equal(g.players[0].score, 200, 'un second bankScore() immédiat ne doit pas créditer les points une deuxième fois');
+});
+
+test('Test 24 — roll() appelé deux fois de suite (sans reroll()/bankScore() entre les deux) ne relance pas une seconde fois', () => {
+  // On ne teste ce garde-fou que sur un premier lancer qui NE busте PAS :
+  // si le premier lancer perd la main, _loseTurn() vide légitimement
+  // g.tableDice et passe au joueur suivant — un roll() ultérieur serait
+  // alors un lancer normal pour ce nouveau joueur, pas un "double clic".
+  let checked = false;
+  for (let i = 0; i < 300 && !checked; i++) {
+    const g = new GameController(['Alice', 'Bob']);
+    let rollCount = 0;
+    g.on('rolled', () => { rollCount += 1; });
+    g.roll();
+    if (g.isBust) continue;
+    checked = true;
+    assert.equal(rollCount, 1);
+    const diceAfterFirstRoll = g.tableDice.map((d) => d.id).sort();
+    // "Double clic" / rejeu d'action : tant que ce premier lancer n'a pas
+    // été résolu (reroll() ou bankScore()), un second roll() ne doit RIEN
+    // faire — sinon un joueur pourrait relancer à volonté jusqu'à obtenir
+    // un bon résultat, sans jamais risquer de perdre la main.
+    g.roll();
+    assert.equal(rollCount, 1, 'un second roll() immédiat ne doit pas déclencher un nouveau lancer');
+    assert.deepEqual(g.tableDice.map((d) => d.id).sort(), diceAfterFirstRoll, 'les dés du premier lancer ne doivent pas être remplacés');
+  }
+  assert.ok(checked, 'un premier lancer non perdant devrait survenir au moins une fois sur 300 essais');
+});
+
+test('Test 23 — reroll() appelé deux fois de suite ne verrouille pas les dés deux fois', () => {
+  const g = new GameController(['Alice', 'Bob']);
+  g.tableDice = [
+    { id: 'a', value: 2, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'b', value: 2, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'c', value: 2, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'd', value: 1, x: 0, y: 0, state: 'dead', selected: false },
+    { id: 'e', value: 6, x: 0, y: 0, state: 'dead', selected: false },
+  ];
+  g.reroll(); // verrouille les 3 dés sélectionnés (pas de listener 'readyToReroll' : pas d'auto-relance ici)
+  assert.equal(g.committedDice.length, 3);
+  // "Double clic" : plus aucun dé n'est sélectionné sur la table (vidée par
+  // le premier reroll()), donc canAct est false et ce second appel ne doit
+  // rien verrouiller de plus.
+  g.reroll();
+  assert.equal(g.committedDice.length, 3, 'un second reroll() immédiat ne doit pas dupliquer le verrouillage');
+  const ids = g.committedDice.map((d) => d.id);
+  assert.equal(new Set(ids).size, ids.length, 'aucun dé ne doit être verrouillé deux fois');
+});
+
 console.log(`\n==================================`);
 console.log(`${passed} test(s) réussi(s), ${failed} échec(s).\n`);
 if (failed > 0) process.exit(1);

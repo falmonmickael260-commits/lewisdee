@@ -685,6 +685,23 @@ button {
 .die.dead, .die.scorable, .die.selected { cursor: pointer; }
 .die.locked { cursor: default; }
 
+/* Dé "hérité" du joueur précédent (main passée) : badge distinct, cumulable
+   avec n'importe quel autre état (scorable/dead/selected/locked) — il ne
+   remplace jamais ce style, il s'ajoute par-dessus pour signaler que ce dé
+   n'a pas été relancé ce tour-ci, juste posé tel quel. */
+.die.carried::before {
+  content: '';
+  position: absolute;
+  top: -8%;
+  left: -8%;
+  width: 24%;
+  height: 24%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, var(--gold-soft, #e8b84b) 55%, #8a6a2a 100%);
+  box-shadow: 0 0 0 2px rgba(20,14,6,0.6), 0 2px 5px rgba(0,0,0,0.55);
+  z-index: 3;
+}
+
 /* Éclat qui balaie la face du dé une fois qu'il s'est posé */
 .die .die-face::after {
   content: '';

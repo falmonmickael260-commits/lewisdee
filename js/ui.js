@@ -144,7 +144,37 @@ export function throwDie(layer, die, opts = {}) {
 function dieClassName(die) {
   const base = typeof die === 'string' ? die : (die.state || '');
   const selected = typeof die === 'object' && die.selected ? ' selected' : '';
-  return `die ${base}${selected}`.trim();
+  // Marqueur additif (indépendant de l'état) : ce dé vient du joueur
+  // précédent (main "passée"), il n'a pas été relancé ce tour-ci.
+  const carried = typeof die === 'object' && die.carried ? ' carried' : '';
+  return `die ${base}${selected}${carried}`.trim();
+}
+
+/**
+ * Pose un dé "hérité" du joueur précédent directement à sa place, SANS
+ * l'animation de lancer (il n'a pas été relancé — seuls les dés neufs du
+ * tour le sont, voir throwDie()). Le marqueur CSS "carried" (dieClassName)
+ * le distingue visuellement des dés réellement en jeu ce tour-ci.
+ */
+export function placeCarriedDie(layer, die) {
+  let el = layer.querySelector(`[data-die-id="${die.id}"]`);
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'die';
+    el.dataset.dieId = die.id;
+    el.appendChild(buildDieCube(die.value));
+    layer.appendChild(el);
+  } else {
+    el.replaceChildren(buildDieCube(die.value));
+  }
+  el.className = dieClassName(die);
+  el.style.left = `${pct(die.x)}%`;
+  el.style.top = `${pct(die.y)}%`;
+  const containerSize = layer.getBoundingClientRect().width || 640;
+  el.style.setProperty('--cube-half', `${(containerSize * 0.05).toFixed(1)}px`);
+  el.style.transform = 'translate(-50%, -50%) rotateZ(0deg)';
+  el.classList.add('settled');
+  return el;
 }
 
 export function markDieState(layer, dieId, die) {

@@ -82,8 +82,56 @@ async function main() {
   const sameDice = JSON.stringify(rolled.state.tableDice) === JSON.stringify(bobSawRoll.state.tableDice);
   console.log('Bob a reçu le même état de dés qu\'Alice ?', sameDice, '(attendu: true)');
 
-  console.log('\n✓ Vérification manuelle terminée sans erreur.');
   alice.close(); bob.close();
+
+  // "Double clic" / requêtes simultanées, sur de VRAIES connexions WebSocket :
+  // un client envoie DEUX fois l'action 'roll' sans attendre entre les deux
+  // (même tick réseau, avant toute réponse du serveur). Si le premier lancer
+  // n'a pas perdu la main, le serveur ne doit traiter que le premier roll()
+  // — le second doit être un no-op (voir le garde-fou dans
+  // GameController.roll()). Comme il faut un premier lancer qui ne buste
+  // pas pour que le test ait un sens, on recrée des parties fraîches jusqu'à
+  // en observer un (le hasard des dés rend un bust assez fréquent).
+  let concurrencyChecked = false;
+  for (let attempt = 0; attempt < 15 && !concurrencyChecked; attempt++) {
+    const a = await connect(`Alice${attempt}`);
+    const b = await connect(`Bob${attempt}`);
+    a.send(JSON.stringify({ type: 'create', name: 'Alice' }));
+    const createdMsg = await waitFor(a, (m) => m.type === 'created');
+    b.send(JSON.stringify({ type: 'join', code: createdMsg.code, name: 'Bob' }));
+    await waitFor(b, (m) => m.type === 'joined');
+    await waitFor(a, (m) => m.type === 'lobby' && m.players.length === 2);
+    a.send(JSON.stringify({ type: 'startGame' }));
+    await waitFor(a, (m) => m.type === 'started');
+
+    a.messages.length = 0;
+    a.send(JSON.stringify({ type: 'action', action: 'roll' }));
+    const firstRoll = await waitFor(a, (m) => m.type === 'gameEvent' && m.event === 'rolled');
+
+    if (!firstRoll.payload.isBust) {
+      concurrencyChecked = true;
+      a.messages.length = 0;
+      a.send(JSON.stringify({ type: 'action', action: 'roll' }));
+      a.send(JSON.stringify({ type: 'action', action: 'roll' }));
+      await new Promise((r) => setTimeout(r, 300));
+      const rolledEvents = a.messages.filter((m) => m.type === 'gameEvent' && m.event === 'rolled');
+      console.log(
+        `Double envoi immédiat de 'roll' sur un lancer non perdant (essai ${attempt + 1}) -> nombre d'événements 'rolled' reçus en plus :`,
+        rolledEvents.length,
+        '(attendu: 0, le premier lancer n\'était pas encore résolu)',
+      );
+      if (rolledEvents.length !== 0) {
+        a.close(); b.close();
+        throw new Error(`Faille de concurrence : un second 'roll' envoyé immédiatement a été traité (${rolledEvents.length} événements 'rolled' en trop).`);
+      }
+    }
+    a.close(); b.close();
+  }
+  if (!concurrencyChecked) {
+    throw new Error('Impossible d\'observer un premier lancer non perdant en 15 essais : test de concurrence non concluant.');
+  }
+
+  console.log('\n✓ Vérification manuelle terminée sans erreur.');
   proc.kill();
   process.exit(0);
 }

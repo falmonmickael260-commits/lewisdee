@@ -295,8 +295,14 @@ function captureUnlockedOrigins() {
 }
 
 function wireController(ctrl) {
-  ctrl.on('rolled', ({ dice, isBust, inheritedCount }) => {
-    dice.forEach((die, i) => {
+  ctrl.on('rolled', ({ dice, isBust, inheritedCount, isHotDiceOpportunity }) => {
+    // Les dés "hérités" du joueur précédent ne sont pas relancés ce tour-ci :
+    // on les pose directement à leur place (voir règle "dés bloqués"), seuls
+    // les dés vraiment neufs reçoivent l'animation de lancer physique.
+    const carriedDice = dice.slice(0, inheritedCount);
+    const freshDice = dice.slice(inheritedCount);
+    carriedDice.forEach((die) => UI.placeCarriedDie(el.diceLayer, die));
+    freshDice.forEach((die, i) => {
       const origin = lastUnlockedOrigins[i];
       // Chaque dé part un peu après le précédent (cadence en cascade) pour
       // qu'on voie clairement 5 dés distincts être lancés, pas un bloc figé.
@@ -310,9 +316,8 @@ function wireController(ctrl) {
     turnTransitionDelay = BANK_TRANSITION_DELAY;
 
     if (!isBust) {
-      UI.showComboBanner(el.comboBanner, el.comboLabel, el.comboPoints, ctrl.hintCombos, {
-        prefix: inheritedCount > 0 ? 'MAIN REPRISE — ' : '',
-      });
+      const prefix = isHotDiceOpportunity ? 'MAIN PLEINE — ' : (inheritedCount > 0 ? 'MAIN REPRISE — ' : '');
+      UI.showComboBanner(el.comboBanner, el.comboLabel, el.comboPoints, ctrl.hintCombos, { prefix });
       el.btnRoll.hidden = true;
       el.btnReroll.hidden = !isMyTurn();
       el.btnBank.hidden = !isMyTurn();

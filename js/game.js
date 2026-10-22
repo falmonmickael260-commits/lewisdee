@@ -48,6 +48,7 @@ export class GameController {
     this.hintCombos = []; // combinaisons détectées dans le lancer complet (indicatif, pour la bannière)
     this.isBust = false;
     this.isOvershoot = false;
+    this.isHotDiceOpportunity = false;
     this.gameOver = false;
     this.winner = null;
     // Contrôleur local : c'est LUI l'autorité, donc il enchaîne bien lui-même
@@ -114,6 +115,13 @@ export class GameController {
    */
   roll() {
     if (this.gameOver) return;
+    // Un lancer ne peut avoir lieu que si le précédent a déjà été résolu
+    // (verrouillé via reroll(), ou sécurisé via bankScore()) : sans ce
+    // garde-fou, un client pourrait appeler roll() en boucle tant que le
+    // résultat ne lui convient pas, sans jamais risquer de perdre la main —
+    // qu'il s'agisse d'un double-clic ou d'un client qui rejouerait
+    // l'action "manuellement" en contournant l'interface.
+    if (this.tableDice.length > 0) return;
     const inherited = this.pendingInherited;
     const inheritedValue = this.pendingInheritedValue;
     this.pendingInherited = [];
@@ -132,6 +140,11 @@ export class GameController {
       y: positions[i].y,
       state: 'rolling',
       selected: false,
+      // Vrai pour les dés "hérités" du joueur précédent (déjà posés, pas
+      // relancés ce tour-ci) : sert à l'UI pour les afficher autrement que
+      // les dés fraîchement lancés (pas d'animation de lancer, marqueur
+      // visuel distinct) — voir UI.placeCarriedDie() dans main.js.
+      carried: i < inherited.length,
     }));
 
     // Détection sur le lancer COMPLET (dés hérités + dés neufs ensemble) :
@@ -163,6 +176,13 @@ export class GameController {
     this.isBust = detection.isBust || overshoot || noImprovement;
     this.isOvershoot = overshoot;
     this.isNoImprovement = noImprovement;
+    // "Main pleine" : tous les dés du lancer participent à une combinaison
+    // valable. Le joueur a alors le choix entre sécuriser immédiatement
+    // (SÉCURISER) ou continuer au risque de tout perdre (RELANCER, qui
+    // redonne alors 5 dés neufs — voir reroll()/hotDice). Exclu si le tour
+    // est de toute façon déjà perdu (dépassement de 10 000, main reprise non
+    // améliorée) : dans ce cas il n'y a jamais eu de choix à faire.
+    this.isHotDiceOpportunity = detection.usesAllDice && !this.isBust;
 
     // En cas de tour perdu (classique, dépassement de 10 000, ou main
     // reprise non améliorée), tous les dés restent "morts" visuellement —
@@ -186,6 +206,7 @@ export class GameController {
       isBust: this.isBust,
       isOvershoot: overshoot,
       isNoImprovement: noImprovement,
+      isHotDiceOpportunity: this.isHotDiceOpportunity,
       isFirstRollOfTurn: this.committedDice.length === 0 && this.turnScore === 0 && inherited.length === 0,
       inheritedCount: inherited.length,
     });
