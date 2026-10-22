@@ -100,6 +100,8 @@ export function throwDie(layer, die, opts = {}) {
 
   if (reducedMotion) {
     el.style.transform = 'translate(-50%, -50%) rotateZ(0deg)';
+    el.classList.add('settled');
+    simplifyToRestingFace(el, die.value);
     return el;
   }
 
@@ -131,8 +133,27 @@ export function throwDie(layer, die, opts = {}) {
   setTimeout(() => playRollSound(), delay + physics.bounds[1] * physics.duration);
   // Petit éclat de lumière sur la face une fois le dé posé, pour marquer
   // l'arrêt du mouvement (sensation "vrai dé qui vient de se stabiliser").
-  anim.onfinish = () => el.classList.add('settled');
+  anim.onfinish = () => {
+    el.classList.add('settled');
+    simplifyToRestingFace(el, die.value);
+  };
   return el;
+}
+
+/**
+ * Une fois le dé posé (rotateX/rotateY figés à 0 par le dernier keyframe,
+ * voir dicePhysics.js), seule la face "front" du cube peut mathématiquement
+ * rester visible — les 5 autres sont strictement de profil (donc invisibles
+ * en théorie). Mais à certains angles de rotateZ, le rendu 3D du navigateur
+ * laisse parfois fuiter un fin liséré d'une face censée être cachée (défaut
+ * de rendu des faces arrière, pas un bug de notre logique). On élimine le
+ * risque à la racine, une fois le dé immobile, en ne gardant plus qu'un
+ * simple plan (la face visible) — aucun changement visuel puisque c'est
+ * déjà, géométriquement, tout ce qu'on est censé voir.
+ */
+function simplifyToRestingFace(el, value) {
+  const cube = el.querySelector('.die-cube');
+  if (cube) cube.replaceChildren(buildDieFace(value, 'cube-face face-front'));
 }
 
 /**
@@ -162,11 +183,13 @@ export function placeCarriedDie(layer, die) {
     el = document.createElement('div');
     el.className = 'die';
     el.dataset.dieId = die.id;
-    el.appendChild(buildDieCube(die.value));
     layer.appendChild(el);
-  } else {
-    el.replaceChildren(buildDieCube(die.value));
   }
+  // Un dé "carried" est toujours immobile (jamais animé) : pas besoin du
+  // cube à 6 faces, seule la face visible compte — voir simplifyToRestingFace().
+  const cube = document.createElement('div');
+  cube.className = 'die-cube';
+  el.replaceChildren(cube);
   el.className = dieClassName(die);
   el.style.left = `${pct(die.x)}%`;
   el.style.top = `${pct(die.y)}%`;
@@ -174,6 +197,7 @@ export function placeCarriedDie(layer, die) {
   el.style.setProperty('--cube-half', `${(containerSize * 0.05).toFixed(1)}px`);
   el.style.transform = 'translate(-50%, -50%) rotateZ(0deg)';
   el.classList.add('settled');
+  simplifyToRestingFace(el, die.value);
   return el;
 }
 
