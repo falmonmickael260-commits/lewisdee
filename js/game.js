@@ -289,6 +289,18 @@ export class GameController {
    * valeur, pour le joueur suivant — "passer la main". Les dés non retenus
    * (morts ou simplement pas choisis) ne comptent pas : ils seront
    * réellement relancés par le joueur suivant.
+   *
+   * Cas particulier — main PLEINE sécurisée (les 5 dés du tour ont tous
+   * servi) : il n'y a alors plus aucun dé précis à transmettre, mais le
+   * joueur suivant peut quand même "continuer" cette main — il démarre son
+   * tour avec la valeur sécurisée déjà comptée comme points provisoires
+   * (modèle additif, comme turnScore qui s'accumule déjà d'un lancer à
+   * l'autre), et relance 5 dés entièrement neufs pour tenter d'ajouter
+   * encore plus. Les points du joueur qui a sécurisé restent DÉFINITIVEMENT
+   * acquis (déjà crédités ci-dessus) : ce n'est qu'un bonus de départ pour
+   * le suivant, jamais une reprise à son détriment — s'il busте derrière,
+   * il perd uniquement ce bonus provisoire, jamais les points déjà
+   * sécurisés du joueur précédent.
    */
   bankScore() {
     if (!this.canBank) return;
@@ -305,11 +317,15 @@ export class GameController {
     }
 
     const scoredDice = [...this.committedDice, ...this.tableDice.filter((d) => d.selected)];
-    const carry = scoredDice.length < 5 ? scoredDice.map((d) => ({ id: d.id, value: d.value })) : [];
+    if (scoredDice.length === 5) {
+      this._endTurn([], 0, gained);
+      return;
+    }
+    const carry = scoredDice.map((d) => ({ id: d.id, value: d.value }));
     // Valeur de cette combinaison transmise "en l'état" (pas de nouveaux
     // dés) : sert au prochain roll() à juger si les dés neufs du joueur
     // suivant ont réellement AMÉLIORÉ la combinaison, ou pas.
-    const carryValue = carry.length > 0 ? calculateScore(detectCombinations(carry).combos) : 0;
+    const carryValue = calculateScore(detectCombinations(carry).combos);
     this._endTurn(carry, carryValue);
   }
 
@@ -357,8 +373,14 @@ export class GameController {
     this._endTurn();
   }
 
-  _endTurn(carryDice = [], carryValue = 0) {
-    this.turnScore = 0;
+  /**
+   * `startingTurnScore` : utilisé uniquement quand une main PLEINE vient
+   * d'être sécurisée (voir bankScore()) — le joueur suivant démarre son
+   * tour avec cette valeur déjà comptée comme points provisoires, au lieu
+   * des dés précis `carryDice`/`carryValue` d'une main partielle.
+   */
+  _endTurn(carryDice = [], carryValue = 0, startingTurnScore = 0) {
+    this.turnScore = startingTurnScore;
     this.committedDice = [];
     this.tableDice = [];
     this.hintCombos = [];
@@ -371,6 +393,7 @@ export class GameController {
       players: this.players,
       inheritedCount: carryDice.length,
       inheritedValue: carryValue,
+      startingTurnScore,
     });
   }
 

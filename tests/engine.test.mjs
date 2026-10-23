@@ -494,6 +494,62 @@ test('Test 19 — Main pleine : sécuriser directement ajoute les points au scor
   assert.equal(g.currentPlayer.name, 'B');
 });
 
+// --- Test 19bis : sécuriser une main pleine donne quand même un bonus de
+// départ au joueur suivant ("il peut continuer ma main"), SANS jamais
+// toucher aux points déjà sécurisés du premier joueur ---
+test('Test 19bis — Sécuriser une main pleine : B démarre avec ces points en jeu, A garde les siens quoi qu\'il arrive', () => {
+  const g = new GameController(['A', 'B']);
+  g.players[0].score = 200;
+  g.turnScore = 300;
+  const rolled = dice([2, 3, 4, 5, 6]); // suite = 1500
+  g.tableDice = rolled.map((d) => ({ id: d.id, value: d.value, x: 0, y: 0, state: 'scorable', selected: true }));
+  g.bankScore(); // A sécurise 200 + 300 + 1500 = 2000
+
+  // gained = turnScore(300) + suite(1500) = 1800 ; A finit à 200+1800=2000.
+  assert.equal(g.players[0].score, 2000, 'A a bien sécurisé la totalité');
+  assert.equal(g.currentPlayer.name, 'B');
+  assert.equal(g.turnScore, 1800, 'B démarre son tour avec les 1800 points sécurisés par A (provisoires pour lui)');
+  assert.equal(g.pendingInherited.length, 0, 'aucun dé précis à hériter : B relance 5 dés entièrement neufs');
+  assert.equal(g.bankable, 1800, 'B peut déjà voir ces 1800 comme points du tour avant même d\'avoir lancé');
+
+  // B relance et obtient un brelan de 3 (300) : le total s'ajoute (1800 + 300 = 2100).
+  g.tableDice = [
+    { id: 'x', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'y', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'z', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'w', value: 2, x: 0, y: 0, state: 'dead', selected: false },
+    { id: 'v', value: 6, x: 0, y: 0, state: 'dead', selected: false },
+  ];
+  assert.equal(g.bankable, 2100, 'B ajoute bien sa combinaison au bonus de départ : 1800 + 300 = 2100');
+  g.bankScore();
+  assert.equal(g.players[1].score, 2100, 'B sécurise le total cumulé');
+  assert.equal(g.players[0].score, 2000, 'le score déjà sécurisé par A reste intact et inchangé par la suite');
+});
+
+// --- Test 19ter : si B échoue après avoir reçu le bonus de main pleine, il perd tout, A ne récupère rien ---
+test('Test 19ter — Si B échoue après une main pleine sécurisée, il perd le bonus ; les points de A restent définitivement acquis', () => {
+  let observed = false;
+  for (let i = 0; i < 400 && !observed; i++) {
+    const g = new GameController(['A', 'B']);
+    const rolled = dice([1, 2, 3, 4, 5]); // suite = 1500
+    g.tableDice = rolled.map((d) => ({ id: d.id, value: d.value, x: 0, y: 0, state: 'scorable', selected: true }));
+    g.bankScore(); // A sécurise 1500, définitivement
+    assert.equal(g.players[0].score, 1500);
+
+    let bustEvent = null;
+    g.on('bust', (e) => { bustEvent = e; });
+    g.roll(); // premier lancer de B, avec un vrai hasard
+    if (!g.isBust) continue; // retente : il faut un vrai bust pour ce test
+
+    observed = true;
+    assert.ok(bustEvent);
+    assert.equal(g.players[0].score, 1500, 'les 1500 de A restent acquis quoi qu\'il arrive à B');
+    assert.equal(g.players[1].score, 0, 'B ne sécurise rien : le bonus de départ est perdu, pas récupéré par A');
+    assert.equal(g.currentPlayer.name, 'A', 'le tour revient à A (partie à 2)');
+  }
+  assert.ok(observed, 'un bust de B devrait survenir au moins une fois sur 400 essais');
+});
+
 // --- Test 20 : les dés hérités sont marqués "carried", pas les dés fraîchement lancés ---
 test('Test 20 — roll() marque les dés hérités comme "carried", jamais les dés neufs', () => {
   const g = new GameController(['Alice', 'Bob']);
