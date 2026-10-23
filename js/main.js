@@ -152,12 +152,18 @@ onlineEl.submit.addEventListener('click', () => {
 
   lobby = openLobby({
     onCreated: (code) => { myMemberId = 0; renderLobbyCode(code); },
-    onJoined: () => { onlineEl.stepForm.hidden = true; onlineEl.stepLobby.hidden = false; },
+    onJoined: (code, id) => { myMemberId = id; onlineEl.stepForm.hidden = true; onlineEl.stepLobby.hidden = false; },
     onLobby: (msg) => renderLobby(msg),
     onError: (message) => {
       onlineEl.error.textContent = message;
       onlineEl.error.hidden = false;
       onlineEl.submit.disabled = false;
+      // Une coupure peut survenir pendant l'attente en salon (pas seulement
+      // sur le formulaire initial) : on ramène toujours à l'étape 1 pour
+      // que le joueur puisse réessayer proprement, avec une connexion neuve.
+      onlineEl.stepForm.hidden = false;
+      onlineEl.stepLobby.hidden = true;
+      if (lobby) { lobby.close(); lobby = null; }
     },
     onStarted: (remoteController) => {
       isOnlineGame = true;
@@ -241,6 +247,7 @@ function startGame(names) {
 
 function enterGame(ctrl) {
   controller = ctrl;
+  window.__debugController = controller;
   wireController(controller);
   UI.removeAllDice(el.diceLayer);
   UI.hideComboBanner(el.comboBanner);

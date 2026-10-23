@@ -61,6 +61,12 @@
       <button class="btn-back" data-back="screen-menu" id="online-back">← Menu</button>
       <h2 id="online-title">Partie en ligne</h2>
 
+      <!-- En dehors des étapes (form/lobby) exprès : une coupure de connexion
+           peut survenir à N'IMPORTE QUELLE étape (y compris en salle
+           d'attente), ce message doit donc rester visible quelle que soit
+           l'étape active, pas seulement celle du formulaire. -->
+      <p class="online-error" id="online-error" hidden></p>
+
       <!-- Étape 1 : nom (+ code si on rejoint) -->
       <div id="online-step-form" class="online-step">
         <div class="name-input-row">
@@ -71,7 +77,6 @@
           <span class="avatar">🔑</span>
           <input type="text" id="online-code-input" maxlength="5" placeholder="Code du salon" style="text-transform:uppercase; letter-spacing:0.15em;" />
         </div>
-        <p class="online-error" id="online-error" hidden></p>
         <button class="btn btn-primary btn-lg" id="online-submit">CONTINUER</button>
       </div>
 

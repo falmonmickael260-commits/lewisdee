@@ -105,6 +105,13 @@ export function openLobby({ onCreated, onJoined, onLobby, onError, onStarted }) 
   const socket = new WebSocket(wsUrl());
   let memberId = null;
   let controller = null;
+  // Distingue une fermeture VOULUE (close(), appelé quand le joueur quitte
+  // volontairement) d'une coupure SUBIE (réseau perdu, téléphone qui se
+  // verrouille, serveur redémarré…) : sans ça, une connexion qui tombe
+  // pendant qu'on attend dans le salon laisse le joueur bloqué sur l'écran
+  // d'attente indéfiniment, SANS AUCUN message — il n'a aucun moyen de
+  // savoir que quelque chose a cassé.
+  let closedIntentionally = false;
 
   socket.addEventListener('message', (event) => {
     const msg = JSON.parse(event.data);
@@ -137,6 +144,16 @@ export function openLobby({ onCreated, onJoined, onLobby, onError, onStarted }) 
   });
 
   socket.addEventListener('error', () => onError?.('Connexion au serveur impossible.'));
+  // 'close' se déclenche aussi bien sur une coupure réseau que sur un
+  // close() volontaire — on ne prévient le joueur QUE si ce n'était pas
+  // voulu, et seulement s'il n'a pas déjà quitté vers l'écran de jeu
+  // normalement (onStarted déjà appelé = la partie tourne, une coupure à
+  // ce stade est gérée différemment, pas ici).
+  socket.addEventListener('close', () => {
+    if (!closedIntentionally && !controller) {
+      onError?.('Connexion perdue. Vérifiez votre réseau et réessayez.');
+    }
+  });
 
   return {
     socket,
@@ -154,6 +171,7 @@ export function openLobby({ onCreated, onJoined, onLobby, onError, onStarted }) 
       socket.send(JSON.stringify({ type: 'startGame' }));
     },
     close() {
+      closedIntentionally = true;
       socket.close();
     },
   };
