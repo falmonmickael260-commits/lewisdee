@@ -41,17 +41,13 @@ function snapshot(controller) {
     pendingInherited: controller.pendingInherited,
     pendingInheritedValue: controller.pendingInheritedValue,
     rollsThisTurn: controller.rollsThisTurn,
-    // Nécessaire pour que le client affiche l'option C de la main pleine
-    // ("DONNER LA MAIN") : vrai tant que tous les dés du lancer en cours
-    // participent à une combinaison valable.
-    isHotDiceOpportunity: controller.isHotDiceOpportunity,
   };
 }
 
 const RELAYED_EVENTS = [
   'rolled', 'selectionChanged', 'bust', 'turnChanged',
   'diceLocked', 'hotDice', 'readyToReroll', 'banked', 'victory',
-  'inheritanceDeclined', 'handGiven',
+  'inheritanceDeclined',
 ];
 
 class Room {
@@ -117,7 +113,6 @@ class Room {
       case 'toggleDie': this.controller.toggleDie(msg.dieId); break;
       case 'reroll': this.controller.reroll(); break;
       case 'bank': this.controller.bankScore(); break;
-      case 'giveFullHand': this.controller.giveFullHand(); break;
       case 'declineInheritance': this.controller.declineInheritance(); break;
       default: break;
     }

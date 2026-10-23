@@ -184,12 +184,10 @@ export class GameController {
     this.isOvershoot = overshoot;
     this.isNoImprovement = noImprovement;
     // "Main pleine" : tous les dés du lancer participent à une combinaison
-    // valable. Le joueur a alors trois options (voir bankScore(), reroll(),
-    // giveFullHand()) : sécuriser immédiatement, continuer au risque de
-    // tout perdre (RELANCER, qui redonne alors 5 dés neufs — "dés chauds"),
-    // ou transmettre la main pleine telle quelle au joueur suivant sans
-    // rien sécuriser. Exclu si le tour est de toute façon déjà perdu : dans
-    // ce cas il n'y a jamais eu de choix à faire.
+    // valable. Le joueur a alors le choix entre sécuriser immédiatement
+    // (SÉCURISER) ou continuer au risque de tout perdre (RELANCER, qui
+    // redonne alors 5 dés neufs — "dés chauds"). Exclu si le tour est de
+    // toute façon déjà perdu : dans ce cas il n'y a jamais eu de choix à faire.
     this.isHotDiceOpportunity = detection.usesAllDice && !this.isBust;
 
     // En cas de tour perdu (classique, dépassement de 10 000, ou main
@@ -262,19 +260,6 @@ export class GameController {
     return this.canAct;
   }
 
-  /**
-   * Option C de la main pleine : vrai uniquement quand TOUS les dés du
-   * lancer en cours participent à une combinaison valable
-   * (isHotDiceOpportunity) ET sont effectivement tous sélectionnés — si le
-   * joueur a désélectionné un dé de la main pleine, ce n'est plus une main
-   * COMPLÈTE à transmettre, l'option disparaît (il garde RELANCER/SÉCURISER
-   * sur sa sélection partielle).
-   */
-  get canGiveFullHand() {
-    return this.isHotDiceOpportunity && this.canAct
-      && this.tableDice.length > 0 && this.tableDice.every((d) => d.selected);
-  }
-
   get bankable() {
     return this.turnScore + this._selectedPoints();
   }
@@ -329,31 +314,6 @@ export class GameController {
   }
 
   /**
-   * Option C de la main pleine : transmet la VALEUR de la main (pas des
-   * dés précis — il n'y en a plus de disponibles, les 5 ont tous servi)
-   * au joueur suivant, SANS rien ajouter au score personnel du joueur
-   * actuel : ces points restent entièrement provisoires.
-   *
-   * Contrairement à une main partielle (bankScore() avec <5 dés retenus),
-   * qui transmet des dés PRÉCIS à fusionner avec le prochain lancer, ici
-   * il ne reste physiquement aucun dé à "garder" : le joueur suivant
-   * relance ses 5 dés entièrement neufs, et toute combinaison qu'il
-   * obtient s'AJOUTE à la valeur transmise (exactement comme les points
-   * s'accumulent déjà d'un lancer à l'autre au sein d'un même tour via
-   * turnScore) — ex. 1 500 transmis + un brelan de 3 (300) obtenu par le
-   * suivant = 1 800. S'il ne décroche aucune combinaison à son premier
-   * lancer, c'est un bust normal : il perd tout, y compris les 1 500
-   * transmis (ils ne reviennent jamais au joueur qui a donné la main).
-   * Uniquement possible sur une vraie main pleine (canGiveFullHand).
-   */
-  giveFullHand() {
-    if (!this.canGiveFullHand) return;
-    const passedValue = this.turnScore + this._selectedPoints();
-    this.emit('handGiven', { player: this.currentPlayer, passedValue });
-    this._endTurn([], 0, passedValue);
-  }
-
-  /**
    * Verrouille les dés sélectionnés et prépare le lancer suivant (sur le
    * reste des dés, ou les 5 si "dés chauds").
    */
@@ -397,15 +357,8 @@ export class GameController {
     this._endTurn();
   }
 
-  /**
-   * `startingTurnScore` : utilisé uniquement par giveFullHand() (Option C
-   * de la main pleine) — le joueur suivant démarre son tour avec cette
-   * valeur déjà dans son turnScore (voir giveFullHand() pour le détail du
-   * modèle additif), au lieu des dés précis `carryDice`/`carryValue` d'une
-   * main partielle transmise via bankScore().
-   */
-  _endTurn(carryDice = [], carryValue = 0, startingTurnScore = 0) {
-    this.turnScore = startingTurnScore;
+  _endTurn(carryDice = [], carryValue = 0) {
+    this.turnScore = 0;
     this.committedDice = [];
     this.tableDice = [];
     this.hintCombos = [];
@@ -418,7 +371,6 @@ export class GameController {
       players: this.players,
       inheritedCount: carryDice.length,
       inheritedValue: carryValue,
-      startingTurnScore,
     });
   }
 

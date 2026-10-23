@@ -752,94 +752,16 @@ test('Test 29 — Aucune limite de lancers : le joueur peut enchaîner plus de 2
   assert.ok(observed, 'une séquence de 3 lancers gagnants consécutifs devrait survenir au moins une fois sur 400 essais');
 });
 
-// =============================================================================
-// SECTION "MAIN PLEINE — OPTION C : DONNER LA MAIN" (demande du 2026-10-23)
-// =============================================================================
-
-// --- Test 30 : giveFullHand() transmet la VALEUR (pas de dés) sans rien sécuriser ---
-test('Test 30 — giveFullHand() : la main pleine part au joueur suivant sans rien sécuriser', () => {
-  const g = new GameController(['A', 'B']);
-  // Suite complète (1-2-3-4-5) = 1500 points, utilise les 5 dés : vraie main pleine.
-  g.tableDice = [1, 2, 3, 4, 5].map((v, i) => ({
-    id: `d${i}`, value: v, x: 0, y: 0, state: 'scorable', selected: true,
-  }));
-  g.hintCombos = detectCombinations(g.tableDice.map((d) => ({ id: d.id, value: d.value }))).combos;
-  // isHotDiceOpportunity est normalement mis à jour par roll() ; on le
-  // simule ici pour tester giveFullHand() de façon isolée et déterministe.
-  g.isHotDiceOpportunity = true;
-  assert.equal(g.canGiveFullHand, true);
-
-  let handGivenEvent = null;
-  g.on('handGiven', (e) => { handGivenEvent = e; });
-  g.giveFullHand();
-
-  assert.equal(g.players[0].score, 0, 'rien n\'est sécurisé dans le score personnel de A');
-  assert.equal(handGivenEvent?.passedValue, 1500);
-  assert.equal(g.currentPlayer.name, 'B', 'le tour passe à B');
-  assert.equal(g.turnScore, 1500, 'B démarre son tour avec les 1500 points déjà en jeu (provisoires)');
-  assert.equal(g.pendingInherited.length, 0, 'aucun dé précis n\'est bloqué : B relance 5 dés entièrement neufs');
-  assert.equal(g.hasPendingInheritance, false);
-});
-
-// --- Test 31 : le joueur suivant AJOUTE ses points à la main pleine transmise ---
-test('Test 31 — Le joueur suivant ajoute sa combinaison à la main pleine reçue (1500 + 300 = 1800)', () => {
+// --- Test 30 : sur une vraie main pleine, sécuriser et continuer sont tous les deux disponibles ---
+test('Test 30 — Main pleine : sécuriser et continuer sont tous les deux possibles (pas de 3e option)', () => {
   const g = new GameController(['A', 'B']);
   g.tableDice = [1, 2, 3, 4, 5].map((v, i) => ({
     id: `d${i}`, value: v, x: 0, y: 0, state: 'scorable', selected: true,
   }));
   g.isHotDiceOpportunity = true;
-  g.giveFullHand(); // A transmet 1500 à B, B démarre avec turnScore=1500
-
-  // B relance ses 5 dés neufs (aucun dé hérité) et obtient un brelan de 3.
-  g.tableDice = [
-    { id: 'x', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
-    { id: 'y', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
-    { id: 'z', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
-    { id: 'w', value: 2, x: 0, y: 0, state: 'dead', selected: false },
-    { id: 'v', value: 6, x: 0, y: 0, state: 'dead', selected: false },
-  ];
-  assert.equal(g.bankable, 1800, 'exactement l\'exemple du cahier des charges : 1500 + 300 (brelan de 3) = 1800');
-  assert.equal(g.canBank, true, '1800 est un multiple de 100 : sécurisable');
-  g.bankScore();
-  assert.equal(g.players[1].score, 1800, 'B sécurise bien le total cumulé, pas seulement son brelan');
-});
-
-// --- Test 32 : échec du joueur suivant => la main pleine transmise est perdue, pas récupérée par A ---
-test('Test 32 — Si le joueur suivant échoue, la main pleine transmise est perdue (jamais récupérée par le donneur)', () => {
-  let observed = false;
-  for (let i = 0; i < 400 && !observed; i++) {
-    const g = new GameController(['A', 'B']);
-    g.players[0].score = 200; // déjà sécurisé par A lors d'un tour précédent
-    g.tableDice = [1, 2, 3, 4, 5].map((v, i2) => ({
-      id: `d${i2}`, value: v, x: 0, y: 0, state: 'scorable', selected: true,
-    }));
-    g.isHotDiceOpportunity = true;
-    g.giveFullHand(); // A transmet 1500 (ses 200 déjà sécurisés restent intacts)
-
-    let bustEvent = null;
-    g.on('bust', (e) => { bustEvent = e; });
-    g.roll(); // premier lancer de B
-    if (!g.isBust) continue; // retente : il faut un vrai bust pour ce test
-
-    observed = true;
-    assert.ok(bustEvent);
-    assert.equal(g.players[0].score, 200, 'les points déjà sécurisés de A restent intacts (A ne récupère jamais les 1500 perdus)');
-    assert.equal(g.players[1].score, 0, 'B ne sécurise rien, les 1500 transmis sont perdus pour tout le monde');
-    assert.equal(g.currentPlayer.name, 'A', 'le tour revient à A (partie à 2)');
-  }
-  assert.ok(observed, 'un bust du joueur suivant devrait survenir au moins une fois sur 400 essais');
-});
-
-// --- Test 33 : sur une vraie main pleine, les trois options sont simultanément disponibles ---
-test('Test 33 — Main pleine : sécuriser, continuer et donner la main sont tous les trois possibles', () => {
-  const g = new GameController(['A', 'B']);
-  g.tableDice = [1, 2, 3, 4, 5].map((v, i) => ({
-    id: `d${i}`, value: v, x: 0, y: 0, state: 'scorable', selected: true,
-  }));
-  g.isHotDiceOpportunity = true;
-  assert.equal(g.canBank, true, 'Option A : sécuriser 1500 directement');
-  assert.equal(g.canReroll, true, 'Option B : continuer en relançant les 5 dés');
-  assert.equal(g.canGiveFullHand, true, 'Option C : donner la main pleine au joueur suivant');
+  assert.equal(g.canBank, true, 'sécuriser 1500 directement doit être possible');
+  assert.equal(g.canReroll, true, 'continuer en relançant les 5 dés doit être possible');
+  assert.equal(g.canGiveFullHand, undefined, 'il ne doit plus y avoir de 3e option "donner la main"');
 });
 
 console.log(`\n==================================`);

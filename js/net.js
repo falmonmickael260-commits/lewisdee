@@ -32,7 +32,6 @@ export class RemoteController {
     this.pendingInherited = [];
     this.pendingInheritedValue = 0;
     this.rollsThisTurn = 0;
-    this.isHotDiceOpportunity = false;
     this.gameOver = false;
     this.winner = null;
     this.listeners = {};
@@ -68,10 +67,6 @@ export class RemoteController {
   get canAct() { return this._selectedPoints() > 0; }
   get bankable() { return this.turnScore + this._selectedPoints(); }
   get canReroll() { return this.canAct; }
-  get canGiveFullHand() {
-    return this.isHotDiceOpportunity && this.canAct
-      && this.tableDice.length > 0 && this.tableDice.every((d) => d.selected);
-  }
   get canBank() {
     if (!this.canAct) return false;
     if (this.bankable % 100 !== 0) return false;
@@ -86,7 +81,6 @@ export class RemoteController {
   toggleDie(dieId) { this._send({ type: 'action', action: 'toggleDie', dieId }); }
   reroll() { this._send({ type: 'action', action: 'reroll' }); }
   bankScore() { this._send({ type: 'action', action: 'bank' }); }
-  giveFullHand() { this._send({ type: 'action', action: 'giveFullHand' }); }
   declineInheritance() { this._send({ type: 'action', action: 'declineInheritance' }); }
 
   /** Applique un instantané d'état reçu du serveur et émet l'événement associé. */

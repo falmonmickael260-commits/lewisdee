@@ -105,7 +105,7 @@
         <p><strong>Un tour</strong> — Vous lancez 5 dés. Si un lancer ne contient aucune combinaison valable, le tour est immédiatement perdu (points provisoires envolés).</p>
         <p><strong>Garder / relancer</strong> — Touchez les dés d'une combinaison pour la conserver : ils restent bloqués, seuls les dés rejetés sont relancés. Vous pouvez ensuite sécuriser vos points, ou relancer autant de fois que vous l'osez tant que ça rapporte.</p>
         <p><strong>Sécuriser un total rond</strong> — Un 5 isolé vaut 50 points et permet de continuer, mais <strong>un total qui n'est pas un multiple de 100 ne peut pas être sécurisé</strong> (ex. un seul 5 = 50, impossible à sécuriser seul ; deux 5 = 100, sécurisable).</p>
-        <p><strong>Main pleine</strong> — Si les 5 dés participent à une combinaison, trois choix s'offrent à vous : sécuriser vos points, relancer les 5 dés neufs au risque de tout perdre, ou <strong>donner la main</strong> au joueur suivant tel quel (vos points restent provisoires, portés désormais par lui).</p>
+        <p><strong>Main pleine</strong> — Si les 5 dés participent à une combinaison, vous récupérez les 5 dés et pouvez continuer à relancer (au risque de tout perdre), ou sécuriser vos points.</p>
 
         <table class="rules-table">
           <thead><tr><th>Combinaison</th><th>Points</th></tr></thead>
@@ -324,10 +324,6 @@
         <div class="hud-actions" id="normal-actions">
           <button class="btn btn-dice" id="btn-roll">🎲 LANCER</button>
           <button class="btn btn-danger" id="btn-reroll" hidden>🔴 RELANCER</button>
-          <!-- Option C de la main pleine : transmettre la main (dés + points
-               provisoires) au joueur suivant sans rien sécuriser soi-même.
-               Visible uniquement quand les 5 dés du lancer scorent tous. -->
-          <button class="btn btn-ghost" id="btn-give-hand" hidden>↷ DONNER LA MAIN</button>
           <button class="btn btn-success" id="btn-bank" hidden>🟢 SÉCURISER <span id="bank-amount"></span></button>
         </div>
       </div>
