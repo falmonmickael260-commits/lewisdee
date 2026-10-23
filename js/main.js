@@ -3,7 +3,7 @@
  * configuration de la partie locale, câblage de l'UI au GameController.
  */
 
-import { GameController, MAX_ROLLS_PER_TURN } from './game.js';
+import { GameController } from './game.js';
 import { openLobby } from './net.js';
 import * as UI from './ui.js';
 import { setSoundEnabled, isSoundEnabled } from './sound.js';
@@ -205,9 +205,9 @@ const el = {
   playerName: document.getElementById('hud-player-name'),
   score: document.getElementById('hud-score'),
   turnPoints: document.getElementById('hud-turn-points'),
-  rollsCount: document.getElementById('hud-rolls'),
   btnRoll: document.getElementById('btn-roll'),
   btnReroll: document.getElementById('btn-reroll'),
+  btnGiveHand: document.getElementById('btn-give-hand'),
   btnBank: document.getElementById('btn-bank'),
   bankAmount: document.getElementById('bank-amount'),
   turnBanner: document.getElementById('online-turn-banner'),
@@ -270,6 +270,7 @@ function resetActionButtons() {
   if (showChoice) updateInheritanceChoice();
   el.btnRoll.hidden = !isMyTurn();
   el.btnReroll.hidden = true;
+  el.btnGiveHand.hidden = true;
   el.btnBank.hidden = true;
 }
 
@@ -287,21 +288,23 @@ function updateHud() {
   el.playerName.textContent = p.name;
   UI.animateNumber(el.score, p.score);
   UI.animateNumber(el.turnPoints, controller.bankable, { prefix: '+', duration: 260 });
-  el.rollsCount.textContent = `${controller.rollsThisTurn}/${MAX_ROLLS_PER_TURN}`;
 }
 
 function updateActionAvailability() {
   // RELANCER et SÉCURISER ont chacun leurs propres conditions : on peut
-  // RELANCER tant qu'il reste un lancer disponible (2 maximum par tour),
-  // mais on ne peut SÉCURISER que si le total est un multiple de 100 (un 5
-  // isolé à 50 points, par exemple, permet de continuer mais pas de
-  // sécuriser) et ne dépasse pas 10 000.
+  // toujours RELANCER tant que la sélection est valable (pas de limite de
+  // lancers), mais on ne peut SÉCURISER que si le total est un multiple de
+  // 100 (un 5 isolé à 50 points, par exemple, permet de continuer mais pas
+  // de sécuriser) et ne dépasse pas 10 000. DONNER LA MAIN n'apparaît que
+  // sur une vraie main pleine (tous les dés du lancer scorent).
   const canReroll = controller.canReroll;
   const canBank = controller.canBank;
+  const canGiveFullHand = controller.canGiveFullHand;
   el.btnReroll.disabled = !canReroll;
   el.btnBank.disabled = !canBank;
   el.btnReroll.style.opacity = canReroll ? 1 : 0.45;
   el.btnBank.style.opacity = canBank ? 1 : 0.45;
+  el.btnGiveHand.hidden = !canGiveFullHand || !isMyTurn();
   el.bankAmount.textContent = controller.bankable.toLocaleString('fr-FR');
 }
 
@@ -357,9 +360,10 @@ function wireController(ctrl) {
     controller.tableDice.forEach((d) => UI.markDieState(el.diceLayer, d.id, d));
   });
 
-  ctrl.on('bust', ({ lost, wasFirstRoll, isOvershoot, isNoImprovement, isCannotSecure }) => {
+  ctrl.on('bust', ({ lost, wasFirstRoll, isOvershoot, isNoImprovement }) => {
     el.btnRoll.hidden = true;
     el.btnReroll.hidden = true;
+    el.btnGiveHand.hidden = true;
     el.btnBank.hidden = true;
     // On capture les ids MAINTENANT : en ligne, l'événement 'turnChanged'
     // qui suit peut arriver et réécrire l'état du contrôleur avant que ce
@@ -375,11 +379,9 @@ function wireController(ctrl) {
         ? 'Trop de points : il faut tomber pile sur 10 000.'
         : isNoImprovement
           ? 'Combinaison non améliorée : la main reprise ne rapporte rien.'
-          : isCannotSecure
-            ? 'Dernier lancer : total non arrondi (multiple de 100 requis), main perdue.'
-            : wasFirstRoll
-              ? 'Aucune combinaison au premier lancer.'
-              : `${lost.toLocaleString('fr-FR')} points perdus.`;
+          : wasFirstRoll
+            ? 'Aucune combinaison au premier lancer.'
+            : `${lost.toLocaleString('fr-FR')} points perdus.`;
       UI.hideComboBanner(el.comboBanner);
       UI.showBustBanner(el.bustBanner, el.bustSub, msg);
       UI.clearDeadDiceFade(el.diceLayer, deadIds);
@@ -416,6 +418,7 @@ function wireController(ctrl) {
 
   ctrl.on('readyToReroll', () => {
     el.btnReroll.hidden = true;
+    el.btnGiveHand.hidden = true;
     el.btnBank.hidden = true;
     el.btnRoll.hidden = true; // on relance automatiquement
     updateHud();
@@ -427,6 +430,7 @@ function wireController(ctrl) {
   ctrl.on('banked', ({ player, gained, newScore }) => {
     el.btnRoll.hidden = true;
     el.btnReroll.hidden = true;
+    el.btnGiveHand.hidden = true;
     el.btnBank.hidden = true;
     UI.hideComboBanner(el.comboBanner);
     UI.bumpElement(el.turnPoints);
@@ -434,6 +438,17 @@ function wireController(ctrl) {
     // le tour ne bascule sur le suivant, pour que le gain soit bien visible.
     UI.animateNumber(el.score, newScore, { duration: 550 });
     setTimeout(() => UI.bumpElement(el.score), 60);
+  });
+
+  // Option C de la main pleine : la main part au joueur suivant SANS que
+  // rien ne soit ajouté au score de celui qui transmet (ses points
+  // restent entièrement provisoires, maintenant portés par le suivant).
+  ctrl.on('handGiven', () => {
+    el.btnRoll.hidden = true;
+    el.btnReroll.hidden = true;
+    el.btnGiveHand.hidden = true;
+    el.btnBank.hidden = true;
+    UI.hideComboBanner(el.comboBanner);
   });
 
   ctrl.on('victory', ({ player, finalScores }) => {
@@ -486,6 +501,11 @@ el.btnReroll.addEventListener('click', () => {
 el.btnBank.addEventListener('click', () => {
   if (!controller || !controller.canBank || !isMyTurn()) return;
   controller.bankScore();
+});
+
+el.btnGiveHand.addEventListener('click', () => {
+  if (!controller || !controller.canGiveFullHand || !isMyTurn()) return;
+  controller.giveFullHand();
 });
 
 document.getElementById('btn-quit-game').addEventListener('click', () => {

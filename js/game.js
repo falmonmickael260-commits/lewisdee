@@ -29,9 +29,6 @@ import {
   wouldOvershoot,
   WINNING_SCORE,
 } from './engine.js';
-
-/** Un tour ne peut jamais compter plus de 2 lancers, sans exception. */
-export const MAX_ROLLS_PER_TURN = 2;
 import { generateDicePositions } from './positions.js';
 
 const AVATARS = ['🦊', '🐺', '🦁', '🐯', '🐻', '🦉', '🐼', '🐸'];
@@ -53,19 +50,11 @@ export class GameController {
     this.isOvershoot = false;
     this.isHotDiceOpportunity = false;
     // Nombre de roll() déjà effectués CE tour-ci (remis à 0 à chaque
-    // changement de joueur, voir _endTurn()). Un tour ne peut jamais
-    // dépasser MAX_ROLLS_PER_TURN lancers, quelle que soit la combinaison
-    // obtenue — il n'y a plus de "dés chauds" permettant de relancer à
-    // volonté : au-delà du dernier lancer autorisé, il faut sécuriser ou
-    // perdre la main.
+    // changement de joueur, voir _endTurn()). Purement informatif — aucune
+    // limite n'est imposée : le joueur peut relancer autant de fois qu'il
+    // le souhaite tant qu'il obtient une combinaison valable (voir
+    // reroll()/hotDice).
     this.rollsThisTurn = 0;
-    // Vrai si le combo du dernier lancer existe mais ne peut PAS être
-    // sécurisé car son total n'est pas un multiple de 100 (ex. un 5 isolé
-    // tout seul) ET qu'il ne reste plus aucun lancer disponible pour tenter
-    // d'arrondir ce total — dans ce cas, la main est perdue (même logique
-    // que isOvershoot/isNoImprovement : un échec "forcé", pas un vrai bust
-    // "aucune combinaison").
-    this.isCannotSecure = false;
     this.gameOver = false;
     this.winner = null;
     // Contrôleur local : c'est LUI l'autorité, donc il enchaîne bien lui-même
@@ -139,12 +128,6 @@ export class GameController {
     // qu'il s'agisse d'un double-clic ou d'un client qui rejouerait
     // l'action "manuellement" en contournant l'interface.
     if (this.tableDice.length > 0) return;
-    // Jamais plus de MAX_ROLLS_PER_TURN lancers dans un même tour, sans
-    // exception (même en cas de "main pleine") — l'UI ne doit jamais
-    // proposer de bouton menant ici au-delà de la limite, ce garde-fou est
-    // la protection de dernier recours (double-clic, client qui rejoue
-    // l'action en contournant l'interface).
-    if (this.rollsThisTurn >= MAX_ROLLS_PER_TURN) return;
     this.rollsThisTurn += 1;
     const inherited = this.pendingInherited;
     const inheritedValue = this.pendingInheritedValue;
@@ -197,28 +180,16 @@ export class GameController {
     // reste techniquement valable.
     const noImprovement = inherited.length > 0 && !detection.isBust && comboValue <= inheritedValue;
 
-    // Dernier lancer autorisé (voir MAX_ROLLS_PER_TURN) : si la combinaison
-    // obtenue est valable mais que son total (points déjà accumulés ce
-    // tour-ci + ce lancer) n'est PAS un multiple de 100 — typiquement un 5
-    // isolé tout seul —, il est impossible de sécuriser, et impossible de
-    // relancer puisqu'il n'y a plus de lancer disponible : la main est
-    // perdue. Ne s'applique pas si le tour est déjà perdu pour une autre
-    // raison (pas de double comptage des causes d'échec).
-    const isLastRoll = this.rollsThisTurn >= MAX_ROLLS_PER_TURN;
-    const cannotSecure = isLastRoll && !detection.isBust && !overshoot && !noImprovement
-      && (this.turnScore + comboValue) % 100 !== 0;
-
-    this.isBust = detection.isBust || overshoot || noImprovement || cannotSecure;
+    this.isBust = detection.isBust || overshoot || noImprovement;
     this.isOvershoot = overshoot;
     this.isNoImprovement = noImprovement;
-    this.isCannotSecure = cannotSecure;
     // "Main pleine" : tous les dés du lancer participent à une combinaison
-    // valable. Si un lancer reste disponible, le joueur a le choix entre
-    // sécuriser immédiatement (SÉCURISER) ou continuer au risque de tout
-    // perdre (RELANCER, qui redonne alors 5 dés neufs) — dans la limite des
-    // MAX_ROLLS_PER_TURN lancers du tour (voir canReroll). Exclu si le tour
-    // est de toute façon déjà perdu : dans ce cas il n'y a jamais eu de
-    // choix à faire.
+    // valable. Le joueur a alors trois options (voir bankScore(), reroll(),
+    // giveFullHand()) : sécuriser immédiatement, continuer au risque de
+    // tout perdre (RELANCER, qui redonne alors 5 dés neufs — "dés chauds"),
+    // ou transmettre la main pleine telle quelle au joueur suivant sans
+    // rien sécuriser. Exclu si le tour est de toute façon déjà perdu : dans
+    // ce cas il n'y a jamais eu de choix à faire.
     this.isHotDiceOpportunity = detection.usesAllDice && !this.isBust;
 
     // En cas de tour perdu (classique, dépassement de 10 000, ou main
@@ -243,12 +214,10 @@ export class GameController {
       isBust: this.isBust,
       isOvershoot: overshoot,
       isNoImprovement: noImprovement,
-      isCannotSecure: cannotSecure,
       isHotDiceOpportunity: this.isHotDiceOpportunity,
       isFirstRollOfTurn: this.committedDice.length === 0 && this.turnScore === 0 && inherited.length === 0,
       inheritedCount: inherited.length,
       rollsThisTurn: this.rollsThisTurn,
-      rollsRemaining: MAX_ROLLS_PER_TURN - this.rollsThisTurn,
     });
 
     if (this.isBust) {
@@ -288,9 +257,22 @@ export class GameController {
     return this._selectedPoints() > 0;
   }
 
-  /** Vrai s'il reste au moins un lancer disponible ce tour-ci (voir MAX_ROLLS_PER_TURN). */
+  /** Alias de canAct : relancer n'a pas de limite de nombre de lancers. */
   get canReroll() {
-    return this.canAct && this.rollsThisTurn < MAX_ROLLS_PER_TURN;
+    return this.canAct;
+  }
+
+  /**
+   * Option C de la main pleine : vrai uniquement quand TOUS les dés du
+   * lancer en cours participent à une combinaison valable
+   * (isHotDiceOpportunity) ET sont effectivement tous sélectionnés — si le
+   * joueur a désélectionné un dé de la main pleine, ce n'est plus une main
+   * COMPLÈTE à transmettre, l'option disparaît (il garde RELANCER/SÉCURISER
+   * sur sa sélection partielle).
+   */
+  get canGiveFullHand() {
+    return this.isHotDiceOpportunity && this.canAct
+      && this.tableDice.length > 0 && this.tableDice.every((d) => d.selected);
   }
 
   get bankable() {
@@ -347,10 +329,33 @@ export class GameController {
   }
 
   /**
+   * Option C de la main pleine : transmet la VALEUR de la main (pas des
+   * dés précis — il n'y en a plus de disponibles, les 5 ont tous servi)
+   * au joueur suivant, SANS rien ajouter au score personnel du joueur
+   * actuel : ces points restent entièrement provisoires.
+   *
+   * Contrairement à une main partielle (bankScore() avec <5 dés retenus),
+   * qui transmet des dés PRÉCIS à fusionner avec le prochain lancer, ici
+   * il ne reste physiquement aucun dé à "garder" : le joueur suivant
+   * relance ses 5 dés entièrement neufs, et toute combinaison qu'il
+   * obtient s'AJOUTE à la valeur transmise (exactement comme les points
+   * s'accumulent déjà d'un lancer à l'autre au sein d'un même tour via
+   * turnScore) — ex. 1 500 transmis + un brelan de 3 (300) obtenu par le
+   * suivant = 1 800. S'il ne décroche aucune combinaison à son premier
+   * lancer, c'est un bust normal : il perd tout, y compris les 1 500
+   * transmis (ils ne reviennent jamais au joueur qui a donné la main).
+   * Uniquement possible sur une vraie main pleine (canGiveFullHand).
+   */
+  giveFullHand() {
+    if (!this.canGiveFullHand) return;
+    const passedValue = this.turnScore + this._selectedPoints();
+    this.emit('handGiven', { player: this.currentPlayer, passedValue });
+    this._endTurn([], 0, passedValue);
+  }
+
+  /**
    * Verrouille les dés sélectionnés et prépare le lancer suivant (sur le
-   * reste des dés, ou les 5 si "dés chauds"). Impossible s'il ne reste plus
-   * de lancer disponible ce tour-ci (voir canReroll/MAX_ROLLS_PER_TURN) :
-   * dans ce cas il n'y a plus que SÉCURISER (si possible) ou perdre la main.
+   * reste des dés, ou les 5 si "dés chauds").
    */
   reroll() {
     if (!this.canReroll) return;
@@ -386,28 +391,34 @@ export class GameController {
       wasFirstRoll: this.committedDice.length === 0 && this.turnScore === 0,
       isOvershoot: this.isOvershoot,
       isNoImprovement: this.isNoImprovement,
-      isCannotSecure: this.isCannotSecure,
     });
     this.isOvershoot = false;
     this.isNoImprovement = false;
-    this.isCannotSecure = false;
     this._endTurn();
   }
 
-  _endTurn(carryDice = [], carryValue = 0) {
-    this.turnScore = 0;
+  /**
+   * `startingTurnScore` : utilisé uniquement par giveFullHand() (Option C
+   * de la main pleine) — le joueur suivant démarre son tour avec cette
+   * valeur déjà dans son turnScore (voir giveFullHand() pour le détail du
+   * modèle additif), au lieu des dés précis `carryDice`/`carryValue` d'une
+   * main partielle transmise via bankScore().
+   */
+  _endTurn(carryDice = [], carryValue = 0, startingTurnScore = 0) {
+    this.turnScore = startingTurnScore;
     this.committedDice = [];
     this.tableDice = [];
     this.hintCombos = [];
     this.pendingInherited = carryDice;
     this.pendingInheritedValue = carryValue;
-    this.rollsThisTurn = 0; // le joueur suivant dispose à nouveau de ses MAX_ROLLS_PER_TURN lancers
+    this.rollsThisTurn = 0; // compteur informatif, remis à 0 pour le joueur suivant
     this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
     this.emit('turnChanged', {
       player: this.currentPlayer,
       players: this.players,
       inheritedCount: carryDice.length,
       inheritedValue: carryValue,
+      startingTurnScore,
     });
   }
 

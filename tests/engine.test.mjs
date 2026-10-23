@@ -18,7 +18,7 @@ import {
   STRAIGHT_POINTS,
   SINGLE_FIVE_POINTS,
 } from '../js/engine.js';
-import { GameController, MAX_ROLLS_PER_TURN } from '../js/game.js';
+import { GameController } from '../js/game.js';
 
 let passed = 0;
 let failed = 0;
@@ -719,72 +719,127 @@ test('Test 28 — Les dés conservés (committedDice) ne sont jamais relancés :
   assert.ok(observed, 'un 2e lancer non perdant devrait survenir au moins une fois sur 300 essais');
 });
 
-// --- Test 29 : un tour ne peut jamais dépasser MAX_ROLLS_PER_TURN lancers ---
-test('Test 29 — Le joueur ne peut jamais effectuer plus de 2 lancers par tour', () => {
-  assert.equal(MAX_ROLLS_PER_TURN, 2);
-  // On relance jusqu'à obtenir une séquence "lancer 1 (non perdant) -> tout
-  // garder -> lancer 2 (non perdant)" : c'est le seul cas qui permet de
-  // vérifier qu'un 3e lancer est bien refusé (sinon le tour est déjà fini
-  // avant même d'atteindre la limite — déjà couvert par d'autres tests).
+// --- Test 29 : pas de limite de lancers — on peut relancer autant de fois
+// que ça continue à scorer (dés chauds à volonté) ---
+test('Test 29 — Aucune limite de lancers : le joueur peut enchaîner plus de 2 lancers tant que ça scorre', () => {
+  // On relance jusqu'à observer une séquence d'au moins 3 lancers gagnants
+  // consécutifs dans le MÊME tour (dés chauds répétés) : ça n'arrivait plus
+  // du tout avec l'ancien plafond de 2, c'est exactement ce qu'on vérifie ici.
   let observed = false;
-  for (let i = 0; i < 300 && !observed; i++) {
+  for (let i = 0; i < 400 && !observed; i++) {
     const g = new GameController(['A', 'B']);
     let rollCount = 0;
     let lastRolled = null;
     g.on('rolled', (e) => { rollCount += 1; lastRolled = e; });
 
-    g.roll(); // lancer 1/2
-    if (lastRolled.isBust) continue;
-    assert.equal(lastRolled.rollsThisTurn, 1);
-
-    g.tableDice.forEach((d) => { d.selected = d.state === 'scorable'; });
-    if (!g.canReroll) continue; // plus rien à relancer (cas rare : dés chauds en 1 lancer)
-    g.reroll();
-    g.roll(); // lancer 2/2
-    if (lastRolled.isBust) continue;
+    let allGood = true;
+    for (let leg = 0; leg < 3 && allGood; leg++) {
+      g.roll();
+      if (lastRolled.isBust) { allGood = false; break; }
+      g.tableDice.forEach((d) => { d.selected = d.state === 'scorable'; });
+      if (!g.canReroll) { allGood = false; break; }
+      g.reroll();
+    }
+    if (!allGood) continue;
 
     observed = true;
-    assert.equal(lastRolled.rollsThisTurn, 2);
-    assert.equal(rollCount, 2);
-    assert.equal(g.canReroll, false, 'plus aucun lancer ne doit être proposé après le 2e');
-
-    // Une 3e tentative de roll() ne doit RIEN faire : aucun événement 'rolled' de plus.
+    assert.equal(rollCount, 3, 'trois lancers consécutifs doivent avoir eu lieu dans le même tour');
+    assert.equal(g.rollsThisTurn, 3, 'le compteur de lancers suit sans jamais bloquer');
+    // Un 4e lancer doit encore fonctionner normalement (pas de plafond).
     g.roll();
-    assert.equal(rollCount, 2, 'un 3e roll() ne doit jamais être exécuté, quel que soit le contexte');
+    assert.equal(rollCount, 4, 'un 4e lancer doit être exécuté normalement, sans aucune limite');
   }
-  assert.ok(observed, 'une séquence de 2 lancers non perdants devrait survenir au moins une fois sur 300 essais');
+  assert.ok(observed, 'une séquence de 3 lancers gagnants consécutifs devrait survenir au moins une fois sur 400 essais');
 });
 
-// --- Test 30 : dernier lancer non arrondi => main perdue, score déjà sécurisé intact ---
-test('Test 30 — Dernier lancer avec un total non multiple de 100 => main perdue, score déjà sécurisé intact', () => {
-  // On relance jusqu'à obtenir, au 2e (et dernier) lancer, une combinaison
-  // valable dont le total n'est PAS un multiple de 100 (typiquement un
-  // unique 5 isolé parmi les dés neufs, rien d'autre ne scorant).
+// =============================================================================
+// SECTION "MAIN PLEINE — OPTION C : DONNER LA MAIN" (demande du 2026-10-23)
+// =============================================================================
+
+// --- Test 30 : giveFullHand() transmet la VALEUR (pas de dés) sans rien sécuriser ---
+test('Test 30 — giveFullHand() : la main pleine part au joueur suivant sans rien sécuriser', () => {
+  const g = new GameController(['A', 'B']);
+  // Suite complète (1-2-3-4-5) = 1500 points, utilise les 5 dés : vraie main pleine.
+  g.tableDice = [1, 2, 3, 4, 5].map((v, i) => ({
+    id: `d${i}`, value: v, x: 0, y: 0, state: 'scorable', selected: true,
+  }));
+  g.hintCombos = detectCombinations(g.tableDice.map((d) => ({ id: d.id, value: d.value }))).combos;
+  // isHotDiceOpportunity est normalement mis à jour par roll() ; on le
+  // simule ici pour tester giveFullHand() de façon isolée et déterministe.
+  g.isHotDiceOpportunity = true;
+  assert.equal(g.canGiveFullHand, true);
+
+  let handGivenEvent = null;
+  g.on('handGiven', (e) => { handGivenEvent = e; });
+  g.giveFullHand();
+
+  assert.equal(g.players[0].score, 0, 'rien n\'est sécurisé dans le score personnel de A');
+  assert.equal(handGivenEvent?.passedValue, 1500);
+  assert.equal(g.currentPlayer.name, 'B', 'le tour passe à B');
+  assert.equal(g.turnScore, 1500, 'B démarre son tour avec les 1500 points déjà en jeu (provisoires)');
+  assert.equal(g.pendingInherited.length, 0, 'aucun dé précis n\'est bloqué : B relance 5 dés entièrement neufs');
+  assert.equal(g.hasPendingInheritance, false);
+});
+
+// --- Test 31 : le joueur suivant AJOUTE ses points à la main pleine transmise ---
+test('Test 31 — Le joueur suivant ajoute sa combinaison à la main pleine reçue (1500 + 300 = 1800)', () => {
+  const g = new GameController(['A', 'B']);
+  g.tableDice = [1, 2, 3, 4, 5].map((v, i) => ({
+    id: `d${i}`, value: v, x: 0, y: 0, state: 'scorable', selected: true,
+  }));
+  g.isHotDiceOpportunity = true;
+  g.giveFullHand(); // A transmet 1500 à B, B démarre avec turnScore=1500
+
+  // B relance ses 5 dés neufs (aucun dé hérité) et obtient un brelan de 3.
+  g.tableDice = [
+    { id: 'x', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'y', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'z', value: 3, x: 0, y: 0, state: 'scorable', selected: true },
+    { id: 'w', value: 2, x: 0, y: 0, state: 'dead', selected: false },
+    { id: 'v', value: 6, x: 0, y: 0, state: 'dead', selected: false },
+  ];
+  assert.equal(g.bankable, 1800, 'exactement l\'exemple du cahier des charges : 1500 + 300 (brelan de 3) = 1800');
+  assert.equal(g.canBank, true, '1800 est un multiple de 100 : sécurisable');
+  g.bankScore();
+  assert.equal(g.players[1].score, 1800, 'B sécurise bien le total cumulé, pas seulement son brelan');
+});
+
+// --- Test 32 : échec du joueur suivant => la main pleine transmise est perdue, pas récupérée par A ---
+test('Test 32 — Si le joueur suivant échoue, la main pleine transmise est perdue (jamais récupérée par le donneur)', () => {
   let observed = false;
-  for (let i = 0; i < 500 && !observed; i++) {
+  for (let i = 0; i < 400 && !observed; i++) {
     const g = new GameController(['A', 'B']);
-    g.players[0].score = 500; // déjà sécurisé lors d'un tour précédent
-    let lastRolled = null;
+    g.players[0].score = 200; // déjà sécurisé par A lors d'un tour précédent
+    g.tableDice = [1, 2, 3, 4, 5].map((v, i2) => ({
+      id: `d${i2}`, value: v, x: 0, y: 0, state: 'scorable', selected: true,
+    }));
+    g.isHotDiceOpportunity = true;
+    g.giveFullHand(); // A transmet 1500 (ses 200 déjà sécurisés restent intacts)
+
     let bustEvent = null;
-    g.on('rolled', (e) => { lastRolled = e; });
     g.on('bust', (e) => { bustEvent = e; });
-
-    g.roll(); // lancer 1/2
-    if (lastRolled.isBust) continue;
-    g.tableDice.forEach((d) => { d.selected = d.state === 'scorable'; });
-    if (!g.canReroll) continue;
-    g.reroll();
-    g.roll(); // lancer 2/2 (dernier)
-
-    if (!lastRolled.isCannotSecure) continue; // retente : ce run n'a pas produit ce cas précis
+    g.roll(); // premier lancer de B
+    if (!g.isBust) continue; // retente : il faut un vrai bust pour ce test
 
     observed = true;
-    assert.equal(lastRolled.isBust, true, 'dernier lancer, total non rond : la main doit être perdue');
-    assert.equal(bustEvent?.isCannotSecure, true);
-    assert.equal(g.players[0].score, 500, 'le score déjà sécurisé avant ce tour reste intact');
-    assert.equal(g.currentPlayer.name, 'B', 'le tour passe au joueur suivant');
+    assert.ok(bustEvent);
+    assert.equal(g.players[0].score, 200, 'les points déjà sécurisés de A restent intacts (A ne récupère jamais les 1500 perdus)');
+    assert.equal(g.players[1].score, 0, 'B ne sécurise rien, les 1500 transmis sont perdus pour tout le monde');
+    assert.equal(g.currentPlayer.name, 'A', 'le tour revient à A (partie à 2)');
   }
-  assert.ok(observed, 'le cas "dernier lancer non arrondi" devrait survenir au moins une fois sur 500 essais');
+  assert.ok(observed, 'un bust du joueur suivant devrait survenir au moins une fois sur 400 essais');
+});
+
+// --- Test 33 : sur une vraie main pleine, les trois options sont simultanément disponibles ---
+test('Test 33 — Main pleine : sécuriser, continuer et donner la main sont tous les trois possibles', () => {
+  const g = new GameController(['A', 'B']);
+  g.tableDice = [1, 2, 3, 4, 5].map((v, i) => ({
+    id: `d${i}`, value: v, x: 0, y: 0, state: 'scorable', selected: true,
+  }));
+  g.isHotDiceOpportunity = true;
+  assert.equal(g.canBank, true, 'Option A : sécuriser 1500 directement');
+  assert.equal(g.canReroll, true, 'Option B : continuer en relançant les 5 dés');
+  assert.equal(g.canGiveFullHand, true, 'Option C : donner la main pleine au joueur suivant');
 });
 
 console.log(`\n==================================`);
