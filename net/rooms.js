@@ -10,6 +10,7 @@
  * UI locale consomme déjà dans js/main.js).
  */
 import { GameController } from '../js/game.js';
+import { reportMatchResult } from './platform.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans 0/O/1/I, pour éviter les confusions à l'oral
 const MAX_PLAYERS = 6;
@@ -59,9 +60,9 @@ class Room {
     this.nextId = 0;
   }
 
-  addMember(ws, name) {
+  addMember(ws, name, platformUserId = null) {
     const id = this.nextId++;
-    const member = { id, ws, name: (name || `Joueur ${id + 1}`).slice(0, 14), connected: true };
+    const member = { id, ws, name: (name || `Joueur ${id + 1}`).slice(0, 14), connected: true, platformUserId };
     this.members.push(member);
     ws.roomCode = this.code;
     ws.memberId = id;
@@ -99,10 +100,34 @@ class Room {
         // source d'autorité — sinon chaque client déclencherait sa propre
         // relance en double).
         if (ev === 'readyToReroll' && !this.controller.gameOver) this.controller.roll();
+        // Déclare le résultat réel à la plateforme centrale, une seule fois
+        // (l'événement 'victory' ne peut être émis qu'une fois par partie :
+        // il suit `this.gameOver` qui passe définitivement à `true`).
+        if (ev === 'victory') this.reportToPlatform(payload);
       });
     }
 
     this.broadcast({ type: 'started', state: snapshot(this.controller) });
+  }
+
+  /**
+   * `this.members[i]` correspond à `this.controller.players[i]` par position
+   * (même ordre au moment de `start()` — voir le commentaire de `start()` :
+   * `names = this.members.map(...)`). C'est la même correspondance dont
+   * dépend déjà `handleAction` (`currentPlayerIndex !== memberId`).
+   */
+  reportToPlatform({ player: winner, finalScores }) {
+    const players = finalScores.map((p) => {
+      const member = this.members[p.id];
+      return {
+        user_id: member?.platformUserId ?? null,
+        guest_label: member?.platformUserId ? null : p.name,
+        outcome: p.id === winner.id ? 'win' : 'loss',
+        score: p.score,
+        position: null,
+      };
+    });
+    reportMatchResult({ roomCode: this.code, finishedAt: Date.now(), players });
   }
 
   handleAction(memberId, msg) {
@@ -139,17 +164,17 @@ export class RoomManager {
     this.rooms = new Map();
   }
 
-  create(ws, name) {
+  create(ws, name, platformUserId = null) {
     const code = makeCode(this.rooms);
     const room = new Room(code);
     this.rooms.set(code, room);
-    const member = room.addMember(ws, name);
+    const member = room.addMember(ws, name, platformUserId);
     ws.send(JSON.stringify({ type: 'created', code, memberId: member.id }));
     room.sendLobby();
     return room;
   }
 
-  join(ws, rawCode, name) {
+  join(ws, rawCode, name, platformUserId = null) {
     const code = String(rawCode || '').toUpperCase().trim();
     const room = this.rooms.get(code);
     if (!room) {
@@ -164,7 +189,7 @@ export class RoomManager {
       ws.send(JSON.stringify({ type: 'error', message: `Salon complet (${MAX_PLAYERS} joueurs maximum).` }));
       return null;
     }
-    const member = room.addMember(ws, name);
+    const member = room.addMember(ws, name, platformUserId);
     ws.send(JSON.stringify({ type: 'joined', code: room.code, memberId: member.id }));
     room.sendLobby();
     return room;

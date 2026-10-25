@@ -11,6 +11,18 @@ import { join, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { RoomManager } from './net/rooms.js';
+import { verifyPlatformToken } from './net/platform-token.js';
+
+// Charge .env.local si présent (développement uniquement — en production,
+// l'hébergeur fournit ses propres variables d'environnement). `loadEnvFile`
+// est disponible depuis Node 20.6 ; silencieusement ignoré sinon.
+if (typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile(new URL('.env.local', import.meta.url));
+  } catch {
+    /* pas de .env.local — normal en production */
+  }
+}
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 // 8744 par défaut pour coller au port utilisé par l'aperçu local de ce
@@ -88,10 +100,10 @@ wss.on('connection', (ws) => {
     }
     switch (msg.type) {
       case 'create':
-        rooms.create(ws, msg.name);
+        rooms.create(ws, msg.name, verifyPlatformToken(msg.rgToken)?.uid ?? null);
         break;
       case 'join':
-        rooms.join(ws, msg.code, msg.name);
+        rooms.join(ws, msg.code, msg.name, verifyPlatformToken(msg.rgToken)?.uid ?? null);
         break;
       case 'startGame':
         rooms.start(ws);

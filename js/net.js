@@ -12,6 +12,7 @@
  * ligne avec exactement le même code d'affichage.
  */
 import { detectCombinations, calculateScore, WINNING_SCORE } from './engine.js';
+import { getIncomingPlatformToken } from './platformToken.js';
 
 function wsUrl() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -152,12 +153,14 @@ export function openLobby({ onCreated, onJoined, onLobby, onError, onStarted }) 
   return {
     socket,
     create(name) {
-      const send = () => socket.send(JSON.stringify({ type: 'create', name }));
+      const rgToken = getIncomingPlatformToken();
+      const send = () => socket.send(JSON.stringify({ type: 'create', name, ...(rgToken ? { rgToken } : {}) }));
       if (socket.readyState === WebSocket.OPEN) send();
       else socket.addEventListener('open', send, { once: true });
     },
     join(code, name) {
-      const send = () => socket.send(JSON.stringify({ type: 'join', code, name }));
+      const rgToken = getIncomingPlatformToken();
+      const send = () => socket.send(JSON.stringify({ type: 'join', code, name, ...(rgToken ? { rgToken } : {}) }));
       if (socket.readyState === WebSocket.OPEN) send();
       else socket.addEventListener('open', send, { once: true });
     },
