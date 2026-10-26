@@ -8,6 +8,8 @@ import { openLobby } from './net.js';
 import * as UI from './ui.js';
 import { setSoundEnabled, isSoundEnabled } from './sound.js';
 import { detectCombinations } from './engine.js';
+import { getIncomingPlatformToken, peekPlatformUsername } from './platformToken.js';
+import { clearIncomingRoomCode, getIncomingRoomCode } from './platformRoom.js';
 
 // ------------------------------------------------------------------ DOM refs
 const screens = {};
@@ -130,12 +132,20 @@ let onlineMode = null; // 'create' | 'join'
 let isOnlineGame = false;
 let myMemberId = null;
 
+/**
+ * Pseudonyme du compte Revanche Games, s'il y en a un. Lu une seule fois :
+ * le jeton est retiré de l'URL au premier appel.
+ */
+const platformUsername = peekPlatformUsername(getIncomingPlatformToken());
+
 function openOnlineScreen(mode) {
   onlineMode = mode;
   onlineEl.title.textContent = mode === 'create' ? 'Créer une partie' : 'Rejoindre une partie';
   onlineEl.codeRow.hidden = mode !== 'join';
   onlineEl.error.hidden = true;
-  onlineEl.name.value = '';
+  // Connecté via la plateforme : son pseudonyme est déjà le bon, inutile de
+  // le lui faire retaper à chaque partie. Il reste modifiable.
+  onlineEl.name.value = platformUsername ? platformUsername.slice(0, 14) : '';
   onlineEl.codeInput.value = '';
   onlineEl.stepForm.hidden = false;
   onlineEl.stepLobby.hidden = true;
@@ -544,3 +554,23 @@ document.getElementById('btn-victory-menu').addEventListener('click', () => {
 });
 
 showScreen('screen-menu');
+
+// ================================================================== INVITATION REVANCHE GAMES
+// Arrivée depuis une invitation acceptée sur la plateforme : l'URL portait
+// `rg_room` (partie à rejoindre), déjà retiré de la barre d'adresse.
+//
+// On ouvre directement l'écran « Rejoindre », code et pseudonyme remplis. Si
+// le pseudonyme est connu, on valide aussi — le joueur arrive dans le salon
+// sans un clic. Sinon l'écran l'attend, prêt, avec juste le nom à saisir.
+{
+  const invitedRoom = getIncomingRoomCode();
+  if (invitedRoom) {
+    clearIncomingRoomCode();
+    openOnlineScreen('join');
+    onlineEl.codeInput.value = invitedRoom;
+
+    if (onlineEl.name.value.trim()) {
+      onlineEl.submit.click();
+    }
+  }
+}
