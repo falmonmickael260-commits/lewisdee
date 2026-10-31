@@ -5,6 +5,7 @@
  * relayer les interactions (tap sur un dé, clic sur un bouton) vers lui.
  */
 
+import { buildDieArtwork } from './dieArtwork.js';
 import { BOARD_CENTER, generateThrowOrigin, randomSpin, randomFinalRotation } from './positions.js';
 import { randomizeDiePhysics, buildDiceThrowKeyframes } from './dicePhysics.js';
 import { playImpactSound, playRollSound } from './sound.js';
@@ -81,9 +82,10 @@ export function throwDie(layer, die, opts = {}) {
     el.className = 'die';
     el.dataset.dieId = die.id;
     el.appendChild(buildDieCube(die.value));
+    el.appendChild(buildDieArtwork(die.value));
     layer.appendChild(el);
   } else {
-    el.replaceChildren(buildDieCube(die.value));
+    el.replaceChildren(buildDieCube(die.value), buildDieArtwork(die.value));
   }
   el.className = dieClassName(die);
   describeDie(el, die);
@@ -185,7 +187,7 @@ export function placeCarriedDie(layer, die) {
   // Un dé hérité est posé directement, avec ses six faces et sa valeur officielle.
   const cube = document.createElement('div');
   cube.className = 'die-cube';
-  el.replaceChildren(cube);
+  el.replaceChildren(cube, buildDieArtwork(die.value));
   el.className = dieClassName(die);
   describeDie(el, die);
   el.style.left = `${pct(die.x)}%`;

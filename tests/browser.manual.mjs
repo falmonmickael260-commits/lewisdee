@@ -34,7 +34,10 @@ try {
     for (const die of await page.locator('#dice-layer .die').all()) {
       const value = Number(await die.getAttribute('data-value'));
       assert.equal(await die.locator('.face-front .pip.on').count(), value, 'display must match official result');
-      assert.equal(await die.locator('.cube-face').count(), 6, 'resting dice retain six 3D faces');
+      assert.equal(await die.locator('.cube-face').count(), 6, 'six cube faces remain available for the throw');
+      assert.equal(await die.locator('.die-artwork .artwork-pip').count(), value, 'resting artwork shows the official result');
+      assert.equal(await die.locator('.die-cube').isVisible(), false, 'adjacent faces are hidden at rest');
+      assert.equal(await die.locator('.die-artwork').isVisible(), true, 'a single readable face is visible at rest');
     }
     await page.screenshot({ path: new URL(`../artifacts/game-${width}x${height}.png`, import.meta.url).pathname });
     await page.close();

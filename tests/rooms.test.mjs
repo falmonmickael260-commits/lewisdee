@@ -79,3 +79,21 @@ test('exact victory and existing disconnection/rejoin behavior remain intact', (
   manager.handleClose(alice);
   assert.equal(manager.rooms.size, 0);
 });
+
+test('full-hand celebration uses the same official flag for both clients and excludes overshoots', () => {
+  const { manager, alice, bob } = setup();
+  manager.start(alice);
+  fixedRoll([1, 2, 3, 4, 5], () => manager.action(alice, { action: 'roll' }));
+  const roll = alice.messages.find(message => message.event === 'rolled');
+  assert.equal(roll.payload.isHotDiceOpportunity, true);
+  assert.equal(roll.payload.isBust, false);
+  assert.deepEqual(roll, bob.messages.find(message => message.event === 'rolled'));
+
+  const other = setup();
+  other.manager.start(other.alice);
+  other.room.controller.players[0].score = 9900;
+  fixedRoll([1, 2, 3, 4, 5], () => other.manager.action(other.alice, { action: 'roll' }));
+  const overshoot = other.alice.messages.find(message => message.event === 'rolled');
+  assert.equal(overshoot.payload.isBust, true);
+  assert.equal(overshoot.payload.isHotDiceOpportunity, false);
+});

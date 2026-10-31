@@ -3,7 +3,7 @@
  * configuration de la partie locale, câblage de l'UI au GameController.
  */
 
-import { presentRoll, presentBank, presentBust, resetPresentation } from './presentation.js';
+import { presentRoll, presentBank, presentBust, resetPresentation, presentFullHand, clearFullHand } from './presentation.js';
 import { attachBots } from './bots.js';
 import { GameController } from './game.js';
 import { openLobby } from './net.js';
@@ -368,6 +368,7 @@ function wireController(ctrl) {
     turnTransitionDelay = BANK_TRANSITION_DELAY;
 
     if (!isBust) {
+      if (isHotDiceOpportunity) presentFullHand();
       const prefix = isHotDiceOpportunity ? 'MAIN PLEINE — ' : (inheritedCount > 0 ? 'MAIN REPRISE — ' : '');
       UI.showComboBanner(el.comboBanner, el.comboLabel, el.comboPoints, ctrl.hintCombos, { prefix });
       el.btnRoll.hidden = true;
@@ -419,6 +420,7 @@ function wireController(ctrl) {
   });
 
   ctrl.on('turnChanged', ({ player, players }) => {
+    clearFullHand();
     setTimeout(() => {
       if (controller !== ctrl) return;
       UI.renderPlayers(el.playersRing, players, ctrl.currentPlayerIndex);
@@ -441,6 +443,7 @@ function wireController(ctrl) {
   });
 
   ctrl.on('hotDice', () => {
+    clearFullHand();
     UI.removeAllDice(el.diceLayer);
     UI.hideComboBanner(el.comboBanner);
   });
@@ -524,6 +527,7 @@ document.getElementById('btn-quit-game').addEventListener('click', () => {
   if (confirm('Quitter la partie en cours ?')) {
     if (isOnlineGame && lobby) { lobby.close(); lobby = null; }
     if (stopBots) { stopBots(); stopBots = null; }
+    clearFullHand();
     controller = null;
     isOnlineGame = false;
     showScreen('screen-menu');
@@ -535,6 +539,7 @@ document.getElementById('btn-quit-game').addEventListener('click', () => {
 let confettiStop = null;
 
 function showVictory(winner, ranking) {
+  clearFullHand();
   if (stopBots) { stopBots(); stopBots = null; }
   document.getElementById('victory-winner').textContent = winner.name;
   document.getElementById('victory-score').textContent = `${winner.score.toLocaleString('fr-FR')} POINTS`;

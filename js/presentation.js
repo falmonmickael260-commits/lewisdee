@@ -34,6 +34,8 @@ document.addEventListener('click', (event) => {
 
 const table = document.getElementById('table-round');
 const instruction = document.getElementById('table-instruction');
+const fullHand = document.getElementById('full-hand-celebration');
+let fullHandTimer = null;
 const effectTimers = new Map();
 function pulse(name, duration) {
   clearTimeout(effectTimers.get(name));
@@ -43,16 +45,19 @@ function pulse(name, duration) {
   effectTimers.set(name, setTimeout(() => { table.classList.remove(name); effectTimers.delete(name); }, duration));
 }
 export function resetPresentation() {
+  clearFullHand();
   effectTimers.forEach(clearTimeout);
   effectTimers.clear();
   table.classList.remove('is-rolling', 'is-banked', 'is-bust');
   instruction.textContent = 'Lancez les dés pour ouvrir le jeu';
 }
 export function presentRoll() {
+  clearFullHand();
   pulse('is-rolling', 1750);
-  instruction.textContent = 'Touchez les dés pour composer votre sélection';
+  instruction.textContent = 'Dés dorés = sélectionnés · Touchez pour garder ou retirer';
 }
 export function presentBank(gained) {
+  clearFullHand();
   table.dataset.gained = gained.toLocaleString('fr-FR');
   pulse('is-banked', 900);
   playUITone('points');
@@ -73,4 +78,23 @@ if (typeof ResizeObserver === 'function') {
   new ResizeObserver(() => {
     hero.querySelectorAll('.die').forEach(die => die.style.setProperty('--cube-half', `${hero.clientWidth * 0.065}px`));
   }).observe(hero);
+}
+
+export function clearFullHand() {
+  if (fullHandTimer !== null) clearTimeout(fullHandTimer);
+  fullHandTimer = null;
+  fullHand.hidden = true;
+  table.classList.remove('is-full-hand');
+}
+export function presentFullHand() {
+  clearFullHand();
+  // Wait for the dice to settle; do not delay or change controller actions.
+  const delay = motionToggle.checked ? 0 : 1700;
+  fullHandTimer = setTimeout(() => {
+    fullHandTimer = null;
+    fullHand.hidden = false;
+    table.classList.add('is-full-hand');
+    playUITone('points');
+    fullHandTimer = setTimeout(clearFullHand, 1450);
+  }, delay);
 }

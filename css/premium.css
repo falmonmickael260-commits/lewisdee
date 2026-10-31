@@ -1071,3 +1071,89 @@ html[data-reduced-motion] .table-dust {
   .hud { padding-left: 8px; padding-right: 8px; }
   .hud-actions .btn { font-size: 12px; }
 }
+
+/* Settled dice show one official face; the six-face cube is only used in flight. */
+.die-artwork {
+  display: none;
+  position: absolute;
+  width: 112%;
+  height: 120%;
+  left: -6%;
+  top: -6%;
+  overflow: visible;
+  pointer-events: none;
+  filter: drop-shadow(2px 6px 3px #00170fb3);
+  transition: translate .2s ease, filter .2s ease;
+}
+.die.settled .die-cube { visibility: hidden; }
+.die.settled .die-artwork { display: block; }
+.die.settled.dead .die-artwork { opacity: .82; }
+.die.settled.selected .die-artwork {
+  opacity: 1;
+  translate: 0 -5px;
+  filter: drop-shadow(0 0 1px #fff5c5) drop-shadow(0 0 4px #ffdb65) drop-shadow(0 0 10px #ffc43b) drop-shadow(2px 8px 4px #00160fa8);
+}
+.die.settled.locked .die-artwork {
+  filter: drop-shadow(0 0 3px #7be2ab) drop-shadow(2px 5px 3px #00170fb3);
+}
+.die.selected:after {
+  top: -13px;
+  right: -10px;
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
+  font-size: 14px;
+  background: #ffe08b;
+  box-shadow: 0 0 0 2px #173b2b, 0 2px 8px #0007;
+  z-index: 4;
+}
+.die.selected:before {
+  background: radial-gradient(ellipse, #ffd05c70, transparent 70%);
+}
+.die.settled { transform-style: flat; }
+.hero-dice .die-artwork { filter: drop-shadow(5px 15px 8px #00170fa6); }
+.full-hand-celebration {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translateX(-50%);
+  width: 80%;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 14px 8px;
+  z-index: 35;
+  color: #fff0b4;
+  text-align: center;
+  pointer-events: none;
+  background: radial-gradient(ellipse, #092e29f2, #092e2900 72%);
+  text-shadow: 0 2px 8px #00170f, 0 0 20px #efbb5290;
+  animation: full-hand-arrival .6s cubic-bezier(.2,1.3,.4,1) both;
+}
+.full-hand-crown { font-size: clamp(26px, 6vw, 46px); line-height: 1; }
+.full-hand-celebration strong { font: 600 clamp(17px, 4vw, 30px) Georgia, serif; letter-spacing: .12em; }
+.full-hand-celebration > span:last-child { font-size: 11px; color: #e9dcb5; }
+.table-round.is-full-hand .table-glow {
+  background: radial-gradient(ellipse, #ffdc754d, transparent 66%);
+  animation: full-hand-glow 1.4s ease-out both;
+}
+.table-round.is-full-hand .die.settled .die-artwork { animation: full-hand-die 1.2s ease-in-out; }
+@keyframes full-hand-arrival {
+  from { opacity: 0; transform: translate(-50%, 12px) scale(.7); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@keyframes full-hand-glow {
+  0%,100% { opacity: .3; transform: scale(.8); }
+  35% { opacity: 1; transform: scale(1.1); }
+}
+@keyframes full-hand-die {
+  0%,100% { translate: 0 -5px; }
+  35% { translate: 0 -12px; }
+  65% { translate: 0 -4px; }
+}
+@media (max-width: 700px) {
+  .dice-layer .die { min-width: 40px; min-height: 40px; }
+  .die.selected:after { width: 19px; height: 19px; line-height: 19px; font-size: 12px; }
+}
+.die { z-index: 1; }
+.die.selected { z-index: 2; }

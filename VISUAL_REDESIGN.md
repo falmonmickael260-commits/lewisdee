@@ -62,3 +62,12 @@ Les ombres et halos hérités ne sont plus cumulés sur les six faces : sélecti
 La couche d'animation `dicePhysics.js` est désormais corrigée : les rotations se terminent sur un nombre entier de tours, au lieu de revenir brutalement à zéro au dernier échantillon. Le résultat officiel n'est pas modifié. Les animations terminées sont libérées et la profondeur est recalculée selon la taille réelle du dé.
 
 `npm run test:animation` vérifie sur 100 trajectoires l'absence de rotation inverse à la dernière image et l'orientation finale de la face officielle. Total des suites exécutées : 46 tests réussis. La validation visuelle sur navigateur et téléphone réel reste à faire, les blocages de l'environnement étant inchangés.
+
+
+## Lisibilité des dés sélectionnés et célébration de main pleine
+
+Les dés au repos montrent désormais un dessin SVG continu avec une seule face officielle et une tranche discrète. Les six faces CSS restent disponibles uniquement pendant le lancer. Les dés sélectionnés portent un halo doré marqué, une coche et une légère élévation ; les dés verrouillés ont un contour vert. Le dessin est déterminé uniquement par la valeur fournie par le contrôleur. Six tests contrôlent le nombre exact de points pour les valeurs 1 à 6.
+
+L'indicateur serveur `isHotDiceOpportunity` déclenche, après le lancer, une couronne et une bannière « MAIN PLEINE », un éclat de table, un mouvement des dés et un son discret. Les effets sont annulés à la relance, à la sécurisation, au changement de tour et en quittant. Les animations réduites montrent une célébration statique. Aucune action, règle ni synchronisation réseau n'est modifiée.
+
+Tests exécutés : 38 moteur + 4 bots + 4 protocole + 7 dessin/animation = 53 tests réussis. Le nouveau test de protocole vérifie le même indicateur de main pleine pour deux clients et l'absence de célébration sur un dépassement. Les assertions navigateur ont été adaptées au rendu à face unique mais leur exécution reste bloquée par l'environnement. La dernière capture disponible sur le Bureau était celle de Render, sans dés ; aucun constat visuel du jeu déployé n'est revendiqué.
