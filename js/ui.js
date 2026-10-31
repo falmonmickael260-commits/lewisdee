@@ -18,8 +18,11 @@ const FACES = {
   6: ['p2', 'p5', 'p4', 'p3', 'p8', 'p9'],
 };
 
-let reducedMotion = false;
-export function setReducedMotion(v) { reducedMotion = v; }
+let reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+export function setReducedMotion(v) {
+  reducedMotion = v;
+  document.documentElement.toggleAttribute('data-reduced-motion', v);
+}
 
 /** Convertit une coordonnée du repère 1000x1000 en pourcentage (0-100). */
 function pct(v) { return (v / 1000) * 100; }
@@ -83,6 +86,7 @@ export function throwDie(layer, die, opts = {}) {
     el.replaceChildren(buildDieCube(die.value));
   }
   el.className = dieClassName(die);
+  describeDie(el, die);
 
   const start = opts.fromPosition || generateThrowOrigin(1.8);
   const startRotZ = Math.random() * 50 - 25;
@@ -95,13 +99,14 @@ export function throwDie(layer, die, opts = {}) {
   // Demi-taille réelle du dé en pixels, pour que les 6 faces du cube
   // (translateZ) se positionnent exactement au bord de la boîte, quelle
   // que soit la taille réelle du plateau à l'écran (mobile compris).
-  const containerSizeForCube = layer.getBoundingClientRect().width || 640;
-  el.style.setProperty('--cube-half', `${(containerSizeForCube * 0.05).toFixed(1)}px`);
+  const containerSizeForCube = layer.clientWidth || layer.getBoundingClientRect().width || 640;
+  el.style.setProperty('--cube-half', `${(containerSizeForCube * 0.055).toFixed(1)}px`);
 
-  if (reducedMotion) {
+  (el.getAnimations?.() || []).forEach((animation) => animation.cancel());
+  if (reducedMotion || typeof el.animate !== 'function') {
     el.style.transform = 'translate(-50%, -50%) rotateZ(0deg)';
     el.classList.add('settled');
-    simplifyToRestingFace(el, die.value);
+    finishRestingCube(el, die.value);
     return el;
   }
 
@@ -135,25 +140,15 @@ export function throwDie(layer, die, opts = {}) {
   // l'arrêt du mouvement (sensation "vrai dé qui vient de se stabiliser").
   anim.onfinish = () => {
     el.classList.add('settled');
-    simplifyToRestingFace(el, die.value);
+    finishRestingCube(el, die.value);
   };
   return el;
 }
 
-/**
- * Une fois le dé posé (rotateX/rotateY figés à 0 par le dernier keyframe,
- * voir dicePhysics.js), seule la face "front" du cube peut mathématiquement
- * rester visible — les 5 autres sont strictement de profil (donc invisibles
- * en théorie). Mais à certains angles de rotateZ, le rendu 3D du navigateur
- * laisse parfois fuiter un fin liséré d'une face censée être cachée (défaut
- * de rendu des faces arrière, pas un bug de notre logique). On élimine le
- * risque à la racine, une fois le dé immobile, en ne gardant plus qu'un
- * simple plan (la face visible) — aucun changement visuel puisque c'est
- * déjà, géométriquement, tout ce qu'on est censé voir.
- */
-function simplifyToRestingFace(el, value) {
+/** Retains the official front value and all adjacent faces for the resting 3D view. */
+function finishRestingCube(el, value) {
   const cube = el.querySelector('.die-cube');
-  if (cube) cube.replaceChildren(buildDieFace(value, 'cube-face face-front'));
+  if (cube) cube.replaceChildren(...buildDieCube(value).children);
 }
 
 /**
@@ -185,25 +180,38 @@ export function placeCarriedDie(layer, die) {
     el.dataset.dieId = die.id;
     layer.appendChild(el);
   }
-  // Un dé "carried" est toujours immobile (jamais animé) : pas besoin du
-  // cube à 6 faces, seule la face visible compte — voir simplifyToRestingFace().
+  // Un dé hérité est posé directement, avec ses six faces et sa valeur officielle.
   const cube = document.createElement('div');
   cube.className = 'die-cube';
   el.replaceChildren(cube);
   el.className = dieClassName(die);
+  describeDie(el, die);
   el.style.left = `${pct(die.x)}%`;
   el.style.top = `${pct(die.y)}%`;
-  const containerSize = layer.getBoundingClientRect().width || 640;
-  el.style.setProperty('--cube-half', `${(containerSize * 0.05).toFixed(1)}px`);
+  const containerSize = layer.clientWidth || layer.getBoundingClientRect().width || 640;
+  el.style.setProperty('--cube-half', `${(containerSize * 0.055).toFixed(1)}px`);
   el.style.transform = 'translate(-50%, -50%) rotateZ(0deg)';
   el.classList.add('settled');
-  simplifyToRestingFace(el, die.value);
+  finishRestingCube(el, die.value);
   return el;
+}
+
+function describeDie(el, die) {
+  const locked = die === 'locked' || die.state === 'locked';
+  if (typeof die === 'object') el.dataset.value = die.value;
+  el.setAttribute('role', 'button');
+  el.tabIndex = locked ? -1 : 0;
+  el.setAttribute('aria-disabled', String(locked));
+  el.setAttribute('aria-pressed', String(Boolean(die.selected)));
+  el.setAttribute('aria-label', `Dé ${el.dataset.value}${locked ? ', conservé' : die.selected ? ', sélectionné' : ', toucher pour sélectionner'}`);
 }
 
 export function markDieState(layer, dieId, die) {
   const el = layer.querySelector(`[data-die-id="${dieId}"]`);
-  if (el) el.className = dieClassName(die);
+  if (el) {
+    el.className = `${dieClassName(die)} settled`;
+    describeDie(el, die);
+  }
 }
 
 export function clearDeadDiceFade(layer, dieIds) {
@@ -251,11 +259,13 @@ export function renderPlayers(container, players, currentIndex) {
     const chip = document.createElement('div');
     chip.className = `player-chip${i === currentIndex ? ' active' : ''}`;
     chip.innerHTML = `
-      <span class="avatar">${p.avatar}</span>
+      <span class="avatar">${escapeHtml(p.avatar)}</span>
       <span class="info">
         <span class="p-name">${escapeHtml(p.name)}</span>
-        <span class="p-score">${p.score.toLocaleString('fr-FR')} pts</span>
+        <span class="p-score">${p.score.toLocaleString('fr-FR')} <small>pts</small></span>
+        <span class="score-track" aria-hidden="true"><i style="width:${Math.max(0, Math.min(100, p.score / 100))}%"></i></span>
       </span>`;
+    chip.setAttribute('aria-label', `${p.name}, ${p.score} points${i === currentIndex ? ', à vous de jouer' : ''}`);
     container.appendChild(chip);
   });
 }
@@ -282,6 +292,7 @@ const numberTweens = new WeakMap();
 export function animateNumber(el, to, { duration = 420, prefix = '' } = {}) {
   const existing = numberTweens.get(el);
   if (existing) cancelAnimationFrame(existing);
+  if (reducedMotion) { numberTweens.delete(el); el.textContent = `${prefix}${to.toLocaleString('fr-FR')}`; return; }
 
   const fromText = el.textContent.replace(/[^\d-]/g, '');
   const from = fromText ? parseInt(fromText, 10) : 0;
@@ -308,6 +319,7 @@ export function animateNumber(el, to, { duration = 420, prefix = '' } = {}) {
 /** Petit moteur de confettis léger (canvas 2D, sans dépendance). */
 export function launchConfetti(canvas) {
   const ctx = canvas.getContext('2d');
+  if (!ctx || reducedMotion) return () => {};
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const resize = () => {
     canvas.width = canvas.clientWidth * dpr;
@@ -346,7 +358,7 @@ export function launchConfetti(canvas) {
       ctx.restore();
     });
     if (frame < 420) raf = requestAnimationFrame(tick);
-    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+    else { ctx.clearRect(0, 0, canvas.width, canvas.height); window.removeEventListener('resize', resize); }
   }
   tick();
   return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };

@@ -3,6 +3,7 @@
  * configuration de la partie locale, câblage de l'UI au GameController.
  */
 
+import { presentRoll, presentBank, presentBust, resetPresentation } from './presentation.js';
 import { GameController } from './game.js';
 import { openLobby } from './net.js';
 import * as UI from './ui.js';
@@ -255,6 +256,7 @@ function startGame(names) {
 }
 
 function enterGame(ctrl) {
+  resetPresentation();
   controller = ctrl;
   wireController(controller);
   UI.removeAllDice(el.diceLayer);
@@ -332,6 +334,7 @@ function captureUnlockedOrigins() {
 
 function wireController(ctrl) {
   ctrl.on('rolled', ({ dice, isBust, inheritedCount, isHotDiceOpportunity }) => {
+    presentRoll();
     // Les dés "hérités" du joueur précédent ne sont pas relancés ce tour-ci :
     // on les pose directement à leur place (voir règle "dés bloqués"), seuls
     // les dés vraiment neufs reçoivent l'animation de lancer physique.
@@ -393,6 +396,7 @@ function wireController(ctrl) {
             ? 'Aucune combinaison au premier lancer.'
             : `${lost.toLocaleString('fr-FR')} points perdus.`;
       UI.hideComboBanner(el.comboBanner);
+      presentBust();
       UI.showBustBanner(el.bustBanner, el.bustSub, msg);
       UI.clearDeadDiceFade(el.diceLayer, deadIds);
       // Les dés verrouillés lors des relances précédentes de ce tour disparaissent aussi.
@@ -437,6 +441,7 @@ function wireController(ctrl) {
   });
 
   ctrl.on('banked', ({ player, gained, newScore }) => {
+    presentBank(gained);
     el.btnRoll.hidden = true;
     el.btnReroll.hidden = true;
     el.btnBank.hidden = true;

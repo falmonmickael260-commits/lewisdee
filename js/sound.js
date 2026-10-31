@@ -96,3 +96,27 @@ export function playRollSound() {
   src.start(now);
   src.stop(now + 0.45);
 }
+
+/** Tiny interaction/score tones; shares the existing mute preference and audio context. */
+export function playUITone(kind = 'tap') {
+  if (!enabled) return;
+  const context = getContext();
+  if (!context) return;
+  if (context.state === 'suspended') context.resume().catch(() => {});
+  const now = context.currentTime;
+  const notes = kind === 'points' ? [523.25, 659.25, 783.99] : [420];
+  notes.forEach((frequency, i) => {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const start = now + i * 0.075;
+    oscillator.type = 'sine';
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.025, start + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.11);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start(start);
+    oscillator.stop(start + 0.12);
+    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+  });
+}
