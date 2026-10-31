@@ -53,3 +53,12 @@ Le bouton **Jouer contre des bots** ouvre un choix de 1 à 5 adversaires. Les bo
 `npm run test:bots` : 4 tests couvrent sélection, total rond, victoire exacte, annulation des actions et une partie complète jusqu'à 10 000. Les 38 tests moteur et les 3 tests protocole restent valides. Les bots sont disponibles en local ; les salons en ligne restent inchangés.
 
 `npm run screenshots` produit six captures réelles (accueil, choix des bots, partie ; mobile et ordinateur) dans `artifacts/screenshots/`, avec Playwright installé. Le script sert les fichiers locaux par interception navigateur : aucun déploiement ni port serveur n'est nécessaire. Le lancement de Chrome reste bloqué dans l'environnement de l'agent ; les captures n'ont pas pu être produites ici.
+
+
+## Correction des dés et des petits écrans
+
+Les ombres et halos hérités ne sont plus cumulés sur les six faces : sélection et conservation sont indiquées sur la face principale. Les arêtes sont moins arrondies pour limiter les ouvertures entre faces. La perspective est atténuée sur mobile, les dés ont une taille visuelle minimale de 36 px et leurs cibles tactiles restent au moins de 44 px ; les boutons d'action mesurent au moins 48 px. Le plateau exploite davantage la largeur en portrait et le zoom navigateur est autorisé.
+
+La couche d'animation `dicePhysics.js` est désormais corrigée : les rotations se terminent sur un nombre entier de tours, au lieu de revenir brutalement à zéro au dernier échantillon. Le résultat officiel n'est pas modifié. Les animations terminées sont libérées et la profondeur est recalculée selon la taille réelle du dé.
+
+`npm run test:animation` vérifie sur 100 trajectoires l'absence de rotation inverse à la dernière image et l'orientation finale de la face officielle. Total des suites exécutées : 46 tests réussis. La validation visuelle sur navigateur et téléphone réel reste à faire, les blocages de l'environnement étant inchangés.

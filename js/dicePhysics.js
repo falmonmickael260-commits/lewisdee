@@ -53,10 +53,9 @@ export function randomizeDiePhysics() {
   // (un dé posé n'est jamais parfaitement à plat à 0.000°).
   const turnsX = 1 + Math.floor(Math.random() * 3); // 1 à 3 tours
   const turnsY = 1 + Math.floor(Math.random() * 3);
-  const residualX = Math.random() * 10 - 5;
-  const residualY = Math.random() * 10 - 5;
-  const totalRotX = (360 * turnsX + Math.abs(residualX)) * (Math.random() < 0.5 ? -1 : 1);
-  const totalRotY = (360 * turnsY + Math.abs(residualY)) * (Math.random() < 0.5 ? -1 : 1);
+  // Whole turns finish on the official front face without a reverse spin.
+  const totalRotX = 360 * turnsX * (Math.random() < 0.5 ? -1 : 1);
+  const totalRotY = 360 * turnsY * (Math.random() < 0.5 ? -1 : 1);
 
   // Durée totale : cible 1 à 1,5s (jusqu'à ~1,6s pour les lancers les plus amples).
   const duration = 1020 + Math.random() * 480;
@@ -178,7 +177,7 @@ export function buildDiceThrowKeyframes(physics, { dxPx, dyPx, startRotZ, endRot
 
   // Verrouille l'état final exact (évite tout résidu d'arrondi visuel).
   frames[frames.length - 1].transform =
-    `translate(-50%, -50%) translate(0px, 0px) rotateX(0deg) rotateY(0deg) rotateZ(${endRotZ}deg) scale(1, 1)`;
+    `translate(-50%, -50%) translate(0px, 0px) rotateX(${totalRotX}deg) rotateY(${totalRotY}deg) rotateZ(${endRotZ}deg) scale(1, 1)`;
 
   return frames;
 }

@@ -66,8 +66,9 @@ export function presentBust() {
 if (typeof ResizeObserver === 'function') {
   const layer = document.getElementById('dice-layer');
   new ResizeObserver(() => {
-    const half = layer.clientWidth * 0.055;
-    if (half > 0) layer.querySelectorAll('.die').forEach(die => die.style.setProperty('--cube-half', `${half}px`));
+    layer.querySelectorAll('.die').forEach(die => {
+      if (die.offsetWidth > 0) die.style.setProperty('--cube-half', `${die.offsetWidth / 2}px`);
+    });
   }).observe(layer);
   new ResizeObserver(() => {
     hero.querySelectorAll('.die').forEach(die => die.style.setProperty('--cube-half', `${hero.clientWidth * 0.065}px`));

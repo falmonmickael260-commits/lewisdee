@@ -100,7 +100,7 @@ export function throwDie(layer, die, opts = {}) {
   // (translateZ) se positionnent exactement au bord de la boîte, quelle
   // que soit la taille réelle du plateau à l'écran (mobile compris).
   const containerSizeForCube = layer.clientWidth || layer.getBoundingClientRect().width || 640;
-  el.style.setProperty('--cube-half', `${(containerSizeForCube * 0.055).toFixed(1)}px`);
+  el.style.setProperty('--cube-half', `${((el.offsetWidth || containerSizeForCube * 0.11) / 2).toFixed(1)}px`);
 
   (el.getAnimations?.() || []).forEach((animation) => animation.cancel());
   if (reducedMotion || typeof el.animate !== 'function') {
@@ -139,6 +139,8 @@ export function throwDie(layer, die, opts = {}) {
   // Petit éclat de lumière sur la face une fois le dé posé, pour marquer
   // l'arrêt du mouvement (sensation "vrai dé qui vient de se stabiliser").
   anim.onfinish = () => {
+    el.style.transform = keyframes[keyframes.length - 1].transform;
+    anim.cancel();
     el.classList.add('settled');
     finishRestingCube(el, die.value);
   };
@@ -189,7 +191,7 @@ export function placeCarriedDie(layer, die) {
   el.style.left = `${pct(die.x)}%`;
   el.style.top = `${pct(die.y)}%`;
   const containerSize = layer.clientWidth || layer.getBoundingClientRect().width || 640;
-  el.style.setProperty('--cube-half', `${(containerSize * 0.055).toFixed(1)}px`);
+  el.style.setProperty('--cube-half', `${((el.offsetWidth || containerSize * 0.11) / 2).toFixed(1)}px`);
   el.style.transform = 'translate(-50%, -50%) rotateZ(0deg)';
   el.classList.add('settled');
   finishRestingCube(el, die.value);
@@ -209,7 +211,8 @@ function describeDie(el, die) {
 export function markDieState(layer, dieId, die) {
   const el = layer.querySelector(`[data-die-id="${dieId}"]`);
   if (el) {
-    el.className = `${dieClassName(die)} settled`;
+    const settled = el.classList.contains('settled');
+    el.className = `${dieClassName(die)}${settled ? ' settled' : ''}`;
     describeDie(el, die);
   }
 }

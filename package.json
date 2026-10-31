@@ -10,7 +10,8 @@
     "test:protocol": "node --test tests/rooms.test.mjs",
     "test:browser": "node tests/browser.manual.mjs",
     "test:bots": "node --test tests/bots.test.mjs",
-    "screenshots": "node tests/screenshots.mjs"
+    "screenshots": "node tests/screenshots.mjs",
+    "test:animation": "node --test tests/dice-animation.test.mjs"
   },
   "engines": {
     "node": ">=18"
