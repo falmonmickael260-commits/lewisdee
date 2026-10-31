@@ -4,6 +4,7 @@
  */
 
 import { presentRoll, presentBank, presentBust, resetPresentation } from './presentation.js';
+import { attachBots } from './bots.js';
 import { GameController } from './game.js';
 import { openLobby } from './net.js';
 import * as UI from './ui.js';
@@ -33,6 +34,12 @@ document.querySelectorAll('[data-back]').forEach((btn) => {
 
 // ------------------------------------------------------------------ Menu
 document.getElementById('btn-play-local').addEventListener('click', () => showScreen('screen-setup'));
+document.getElementById('btn-play-bots').addEventListener('click', () => showScreen('screen-bots'));
+document.getElementById('btn-start-bots').addEventListener('click', () => {
+  const count = Number(document.getElementById('bot-count').value);
+  const names = ['Atlas · Bot', 'Nova · Bot', 'Oscar · Bot', 'Jade · Bot', 'Rio · Bot'].slice(0, count);
+  startGame([document.getElementById('bot-player-name').value.trim() || 'Vous', ...names], names.map((_, i) => i + 1));
+});
 document.getElementById('btn-create-room').addEventListener('click', () => openOnlineScreen('create'));
 document.getElementById('btn-join-room').addEventListener('click', () => openOnlineScreen('join'));
 document.getElementById('btn-rules').addEventListener('click', () => {
@@ -236,6 +243,8 @@ const el = {
 };
 
 let controller = null;
+let localBotIds = [];
+let stopBots = null;
 
 // Timings des transitions de tour : le délai par défaut laisse voir le score
 // s'animer après une sécurisation ; le délai "bust" laisse d'abord les dés
@@ -250,12 +259,15 @@ const BUST_REVEAL_DELAY = 1900;
 const BUST_FADE_DURATION = 420;
 let turnTransitionDelay = BANK_TRANSITION_DELAY;
 
-function startGame(names) {
+function startGame(names, botIds = []) {
+  localBotIds = botIds;
   isOnlineGame = false;
   enterGame(new GameController(names));
 }
 
 function enterGame(ctrl) {
+  if (stopBots) { stopBots(); stopBots = null; }
+  if (isOnlineGame) localBotIds = [];
   resetPresentation();
   controller = ctrl;
   wireController(controller);
@@ -267,15 +279,16 @@ function enterGame(ctrl) {
   resetActionButtons();
   updateTurnBanner();
   showScreen('screen-game');
+  if (localBotIds.length) stopBots = attachBots(ctrl, localBotIds);
 }
 
 /** En ligne, seul le joueur dont c'est le tour peut agir. */
 function isMyTurn() {
-  return !isOnlineGame || controller.currentPlayerIndex === myMemberId;
+  return isOnlineGame ? controller.currentPlayerIndex === myMemberId : !localBotIds.includes(controller.currentPlayerIndex);
 }
 
 function updateTurnBanner() {
-  if (!isOnlineGame || !controller) { el.turnBanner.hidden = true; return; }
+  if (!controller || (!isOnlineGame && !localBotIds.length)) { el.turnBanner.hidden = true; return; }
   el.turnBanner.hidden = false;
   el.turnBanner.textContent = isMyTurn() ? 'À vous de jouer !' : `Tour de ${controller.currentPlayer.name}…`;
 }
@@ -388,6 +401,7 @@ function wireController(ctrl) {
     // perdu" : le joueur doit d'abord VOIR où les dés sont tombés.
     turnTransitionDelay = BUST_REVEAL_DELAY + BUST_FADE_DURATION + 260;
     setTimeout(() => {
+      if (controller !== ctrl) return;
       const msg = isOvershoot
         ? 'Trop de points : il faut tomber pile sur 10 000.'
         : isNoImprovement
@@ -406,6 +420,7 @@ function wireController(ctrl) {
 
   ctrl.on('turnChanged', ({ player, players }) => {
     setTimeout(() => {
+      if (controller !== ctrl) return;
       UI.renderPlayers(el.playersRing, players, ctrl.currentPlayerIndex);
       UI.removeAllDice(el.diceLayer);
       UI.hideComboBanner(el.comboBanner);
@@ -454,7 +469,7 @@ function wireController(ctrl) {
   });
 
   ctrl.on('victory', ({ player, finalScores }) => {
-    setTimeout(() => showVictory(player, finalScores), 500);
+    setTimeout(() => { if (controller === ctrl) showVictory(player, finalScores); }, 500);
   });
 }
 
@@ -508,6 +523,7 @@ el.btnBank.addEventListener('click', () => {
 document.getElementById('btn-quit-game').addEventListener('click', () => {
   if (confirm('Quitter la partie en cours ?')) {
     if (isOnlineGame && lobby) { lobby.close(); lobby = null; }
+    if (stopBots) { stopBots(); stopBots = null; }
     controller = null;
     isOnlineGame = false;
     showScreen('screen-menu');
@@ -519,6 +535,7 @@ document.getElementById('btn-quit-game').addEventListener('click', () => {
 let confettiStop = null;
 
 function showVictory(winner, ranking) {
+  if (stopBots) { stopBots(); stopBots = null; }
   document.getElementById('victory-winner').textContent = winner.name;
   document.getElementById('victory-score').textContent = `${winner.score.toLocaleString('fr-FR')} POINTS`;
   const rankEl = document.getElementById('victory-ranking');
@@ -547,7 +564,7 @@ document.getElementById('btn-replay').addEventListener('click', () => {
     return;
   }
   const names = controller ? controller.players.map((p) => p.name) : DEFAULT_NAMES.slice(0, playerCount);
-  startGame(names);
+  startGame(names, localBotIds);
 });
 
 document.getElementById('btn-victory-menu').addEventListener('click', () => {

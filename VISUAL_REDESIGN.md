@@ -44,3 +44,12 @@ Une installation Playwright existante peut être utilisée via `PLAYWRIGHT_MODUL
 - L'écoute des ports et le navigateur étant bloqués, la revue visuelle et les tests réels multijoueurs restent requis avant une publication.
 
 Aucune publication, aucun push et aucun changement d'infrastructure effectué.
+
+
+## Mode solo contre des bots
+
+Le bouton **Jouer contre des bots** ouvre un choix de 1 à 5 adversaires. Les bots utilisent les actions publiques du contrôleur local, analysent leurs sélections avec le moteur officiel, relancent et sécurisent automatiquement. Les commandes du joueur sont masquées pendant leur tour. Les délais laissent les animations se terminer ; quitter annule leurs actions et rejouer conserve les adversaires.
+
+`npm run test:bots` : 4 tests couvrent sélection, total rond, victoire exacte, annulation des actions et une partie complète jusqu'à 10 000. Les 38 tests moteur et les 3 tests protocole restent valides. Les bots sont disponibles en local ; les salons en ligne restent inchangés.
+
+`npm run screenshots` produit six captures réelles (accueil, choix des bots, partie ; mobile et ordinateur) dans `artifacts/screenshots/`, avec Playwright installé. Le script sert les fichiers locaux par interception navigateur : aucun déploiement ni port serveur n'est nécessaire. Le lancement de Chrome reste bloqué dans l'environnement de l'agent ; les captures n'ont pas pu être produites ici.

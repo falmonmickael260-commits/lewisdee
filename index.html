@@ -24,6 +24,7 @@
 
       <div class="menu-buttons">
         <button class="btn btn-primary btn-lg" id="btn-play-local"><span>À vous de jouer</span><small>PARTIE LOCALE · 2 À 6 JOUEURS</small></button>
+        <button class="btn btn-ghost" id="btn-play-bots">Jouer contre des bots <span aria-hidden="true">↗</span></button>
         <button class="btn btn-ghost" id="btn-create-room">Créer un salon <span aria-hidden="true">↗</span></button>
         <button class="btn btn-ghost" id="btn-join-room">Rejoindre des amis <span aria-hidden="true">→</span></button>
         <button class="btn btn-ghost" id="btn-rules">RÈGLES</button>
@@ -53,6 +54,24 @@
       <div class="setup-names" id="setup-names"></div>
 
       <button class="btn btn-primary btn-lg" id="btn-start-game">COMMENCER LA PARTIE</button>
+    </div>
+  </section>
+
+  <section id="screen-bots" class="screen">
+    <div class="panel">
+      <button class="btn-back" data-back="screen-menu">← Menu</button>
+      <h2>Seul contre le Club</h2>
+      <p class="online-note">Prenez place face à nos joueurs virtuels. Même table, mêmes règles : à vous de prendre les bons risques.</p>
+      <label class="bot-field" for="bot-player-name">Votre pseudo
+        <input id="bot-player-name" maxlength="14" placeholder="Votre pseudo" autocomplete="nickname" />
+      </label>
+      <label class="bot-field" for="bot-count">Adversaires
+        <select id="bot-count">
+          <option value="1">1 bot — Duel</option><option value="2">2 bots</option>
+          <option value="3">3 bots</option><option value="4">4 bots</option><option value="5">5 bots — Table complète</option>
+        </select>
+      </label>
+      <button class="btn btn-primary btn-lg" id="btn-start-bots">JOUER CONTRE LES BOTS</button>
     </div>
   </section>
 

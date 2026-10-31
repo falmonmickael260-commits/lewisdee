@@ -994,3 +994,26 @@ html[data-reduced-motion] .table-dust {
   height: max(100%, 44px);
   transform: translate(-50%, -50%) translateZ(-2px);
 }
+.menu-buttons #btn-play-bots {
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: none;
+  display: flex;
+  justify-content: space-between;
+  padding: 15px 22px;
+  border-color: #d6b87766;
+  color: #f0dcad;
+}
+.bot-field { display: grid; gap: 9px; margin: 20px 0; color: var(--ink-dim); font-size: 13px; }
+.bot-field input, .bot-field select {
+  width: 100%; padding: 14px; min-height: 48px; border-radius: 10px;
+  border: 1px solid #c7b78344; background: #0b211b; color: var(--ink); font: inherit; font-size: 16px;
+}
+@media(max-height:740px) and (max-width:700px) {
+  .menu-content { margin-top: 28px; }
+  .menu-buttons { gap: 6px; }
+  .menu-buttons #btn-play-bots { padding: 11px 20px; min-height: 42px; }
+}
+@media(max-height:500px) and (orientation:landscape) {
+  .menu-content { margin-top: 0; transform: scale(.65); }
+}

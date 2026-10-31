@@ -8,7 +8,9 @@
     "start": "node server.js",
     "test": "node tests/engine.test.mjs",
     "test:protocol": "node --test tests/rooms.test.mjs",
-    "test:browser": "node tests/browser.manual.mjs"
+    "test:browser": "node tests/browser.manual.mjs",
+    "test:bots": "node --test tests/bots.test.mjs",
+    "screenshots": "node tests/screenshots.mjs"
   },
   "engines": {
     "node": ">=18"
