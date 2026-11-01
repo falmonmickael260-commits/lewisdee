@@ -254,7 +254,10 @@ export class RoomManager {
       const member = room?.members.find(m => m.token === c.proof.token);
       const expected = c.inviter || c.uid;
       if (!room || !member || (member.platformUserId && expected && member.platformUserId !== expected)) throw new Error('Votre ami ne se trouve plus dans ce salon.');
-      if (!member.platformUserId && expected) member.platformUserId = expected;
+      if (!member.platformUserId && expected) {
+        if (room.members.some(m => m !== member && m.platformUserId === expected)) throw new Error('Ce compte possède déjà une place dans le salon.');
+        member.platformUserId = expected;
+      }
       return room;
     };
     return {
