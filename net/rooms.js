@@ -11,6 +11,7 @@
  */
 import { GameController } from '../js/game.js';
 import { reportMatchResult } from './platform.js';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans 0/O/1/I, pour éviter les confusions à l'oral
 const MAX_PLAYERS = 6;
@@ -54,6 +55,7 @@ const RELAYED_EVENTS = [
 class Room {
   constructor(code) {
     this.code = code;
+    this.instance = randomUUID();
     this.members = []; // { id, ws, name, connected }
     this.started = false;
     this.controller = null;
@@ -62,7 +64,7 @@ class Room {
 
   addMember(ws, name, platformUserId = null) {
     const id = this.nextId++;
-    const member = { id, ws, name: (name || `Joueur ${id + 1}`).slice(0, 14), connected: true, platformUserId };
+    const member = { id, ws, name: (name || `Joueur ${id + 1}`).slice(0, 14), connected: true, platformUserId, token: randomBytes(24).toString('base64url') };
     this.members.push(member);
     ws.roomCode = this.code;
     ws.memberId = id;
@@ -169,7 +171,7 @@ export class RoomManager {
     const room = new Room(code);
     this.rooms.set(code, room);
     const member = room.addMember(ws, name, platformUserId);
-    ws.send(JSON.stringify({ type: 'created', code, memberId: member.id }));
+    ws.send(JSON.stringify({ type: 'created', code, memberId: member.id, token: member.token }));
     room.sendLobby();
     return room;
   }
@@ -190,7 +192,7 @@ export class RoomManager {
       return null;
     }
     const member = room.addMember(ws, name, platformUserId);
-    ws.send(JSON.stringify({ type: 'joined', code: room.code, memberId: member.id }));
+    ws.send(JSON.stringify({ type: 'joined', code: room.code, memberId: member.id, token: member.token }));
     room.sendLobby();
     return room;
   }
@@ -212,7 +214,62 @@ export class RoomManager {
   handleClose(ws) {
     const room = this.rooms.get(ws.roomCode);
     if (!room) return;
+    const member = room.members.find(m => m.ws === ws);
+    if (!member || !member.connected) return;
+    member.connected = false;
+    room.sendLobby();
+    if (room.controller?.gameOver && room.isEmpty()) { this.rooms.delete(room.code); return; }
+    const timer = setTimeout(() => {
+      if (member.connected || member.ws !== ws) return;
+      if (!room.started) room.members = room.members.filter(m => m !== member);
+      room.sendLobby();
+      if (room.isEmpty()) this.rooms.delete(room.code);
+    }, 60000);
+    timer.unref?.();
+  }
+
+  resume(ws, code, token) {
+    const room = this.rooms.get(String(code || '').toUpperCase());
+    const member = room?.members.find(m => typeof token === 'string' && token.length >= 20 && m.token === token);
+    if (!room || !member) { ws.send(JSON.stringify({ type: 'error', code: 'session_missing', message: 'Session introuvable.' })); return false; }
+    const previous = member.ws;
+    member.ws = ws; member.connected = true; ws.roomCode = room.code; ws.memberId = member.id;
+    if (previous !== ws && previous.readyState === 1) previous.close?.();
+    ws.send(JSON.stringify({ type: 'joined', code: room.code, memberId: member.id, token: member.token }));
+    room.sendLobby();
+    if (room.started && room.controller) ws.send(JSON.stringify({ type: 'started', state: snapshot(room.controller) }));
+    return true;
+  }
+
+  leave(ws) {
+    const room = this.rooms.get(ws.roomCode);
+    if (!room) return;
     room.removeMember(ws);
     if (room.isEmpty()) this.rooms.delete(room.code);
+  }
+
+  platformConnector() {
+    const lookup = c => {
+      const room = this.rooms.get(c.room);
+      const member = room?.members.find(m => m.token === c.proof.token);
+      const expected = c.inviter || c.uid;
+      if (!room || !member || (member.platformUserId && expected && member.platformUserId !== expected)) throw new Error('Votre ami ne se trouve plus dans ce salon.');
+      if (!member.platformUserId && expected) member.platformUserId = expected;
+      return room;
+    };
+    return {
+      inspect: c => { const r = lookup(c); return { code: r.code, instance: r.instance, capacity: MAX_PLAYERS, count: r.members.length, status: r.started ? 'started' : 'open', ownerUid: r.members.find(m => m.token === c.proof.token)?.platformUserId }; },
+      admit: c => {
+        const room = lookup(c);
+        if (room.instance !== c.instance) throw new Error('Salon remplacé.');
+        let member = room.members.find(m => m.platformUserId === c.uid);
+        if (!member) {
+          const socket = { readyState: 0, send() {} };
+          if (!this.join(socket, c.room, c.name, c.uid)) throw new Error('Ce salon est complet ou a déjà commencé.');
+          member = room.members.find(m => m.ws === socket);
+        }
+        return { code: room.code, token: member.token, memberId: member.id };
+      },
+    };
   }
 }

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { RoomManager } from './net/rooms.js';
 import { verifyPlatformToken } from './net/platform-token.js';
+import { nodeConnector } from './platform-connector/server.mjs';
 
 // Charge .env.local si présent (développement uniquement — en production,
 // l'hébergeur fournit ses propres variables d'environnement). `loadEnvFile`
@@ -46,6 +47,7 @@ const MIME = {
 
 const server = createServer(async (req, res) => {
   try {
+    if (await nodeConnector(req, res, '10000', rooms.platformConnector())) return;
     const url = new URL(req.url, `http://${req.headers.host}`);
     let path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '');
     if (path === '/' || path === '') path = '/index.html';
@@ -99,6 +101,12 @@ wss.on('connection', (ws) => {
       return;
     }
     switch (msg.type) {
+      case 'resume':
+        rooms.resume(ws, msg.code, msg.token);
+        break;
+      case 'leave':
+        rooms.leave(ws);
+        break;
       case 'create':
         rooms.create(ws, msg.name, verifyPlatformToken(msg.rgToken)?.uid ?? null);
         break;

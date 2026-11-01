@@ -96,80 +96,76 @@ export class RemoteController {
  * via des callbacks. Retourne un objet avec des méthodes pour piloter le
  * salon ; onGameStarted(controller) est appelé une fois la partie lancée.
  */
+let rememberedSession = null;
+export function getLobbySession() {
+  if (rememberedSession) return rememberedSession;
+  try { return JSON.parse(localStorage.getItem('10000:session') || 'null'); } catch { return null; }
+}
+function saveLobbySession(value) {
+  rememberedSession = value;
+  try { if (value) localStorage.setItem('10000:session', JSON.stringify(value)); else localStorage.removeItem('10000:session'); } catch { /* memory fallback */ }
+  window.dispatchEvent(new Event('rg:session'));
+}
+
 export function openLobby({ onCreated, onJoined, onLobby, onError, onStarted }) {
-  const socket = new WebSocket(wsUrl());
-  let memberId = null;
-  let controller = null;
-  // Distingue une fermeture VOULUE (close(), appelé quand le joueur quitte
-  // volontairement) d'une coupure SUBIE (réseau perdu, téléphone qui se
-  // verrouille, serveur redémarré…) : sans ça, une connexion qui tombe
-  // pendant qu'on attend dans le salon laisse le joueur bloqué sur l'écran
-  // d'attente indéfiniment, SANS AUCUN message — il n'a aucun moyen de
-  // savoir que quelque chose a cassé.
-  let closedIntentionally = false;
-
-  socket.addEventListener('message', (event) => {
-    const msg = JSON.parse(event.data);
-    switch (msg.type) {
-      case 'created':
-        memberId = msg.memberId;
-        onCreated?.(msg.code, memberId);
-        break;
-      case 'joined':
-        memberId = msg.memberId;
-        onJoined?.(msg.code, memberId);
-        break;
-      case 'lobby':
-        onLobby?.(msg);
-        break;
-      case 'error':
-        onError?.(msg.message);
-        break;
-      case 'started':
-        controller = new RemoteController(socket, memberId);
-        Object.assign(controller, msg.state);
-        onStarted?.(controller);
-        break;
-      case 'gameEvent':
-        controller?.applyServerMessage(msg);
-        break;
-      default:
-        break;
-    }
-  });
-
-  socket.addEventListener('error', () => onError?.('Connexion au serveur impossible.'));
-  // 'close' se déclenche aussi bien sur une coupure réseau que sur un
-  // close() volontaire — on ne prévient le joueur QUE si ce n'était pas
-  // voulu, et seulement s'il n'a pas déjà quitté vers l'écran de jeu
-  // normalement (onStarted déjà appelé = la partie tourne, une coupure à
-  // ce stade est gérée différemment, pas ici).
-  socket.addEventListener('close', () => {
-    if (!closedIntentionally && !controller) {
-      onError?.('Connexion perdue. Vérifiez votre réseau et réessayez.');
-    }
-  });
-
+  let socket, memberId = null, controller = null, seat = null, pending = null;
+  let closedIntentionally = false, retry = null;
+  const connect = () => {
+    if (closedIntentionally) return;
+    const current = new WebSocket(wsUrl()); socket = current;
+    current.addEventListener('open', () => {
+      if (current !== socket) return;
+      if (controller) controller.socket = current;
+      if (seat?.token) current.send(JSON.stringify({ type: 'resume', code: seat.code, token: seat.token }));
+      else if (pending) { current.send(JSON.stringify(pending)); pending = null; }
+    });
+    current.addEventListener('message', event => {
+      if (current !== socket) return;
+      let msg; try { msg = JSON.parse(event.data); } catch { return; }
+      switch (msg.type) {
+        case 'created': case 'joined':
+          memberId = msg.memberId;
+          seat = { code: msg.code, token: msg.token, memberId };
+          saveLobbySession(seat);
+          if (msg.type === 'created') onCreated?.(msg.code, memberId);
+          else onJoined?.(msg.code, memberId);
+          break;
+        case 'lobby': onLobby?.(msg); break;
+        case 'error':
+          if (msg.code === 'session_missing') { seat = null; saveLobbySession(null); }
+          onError?.(msg.message); break;
+        case 'started':
+          if (!controller) {
+            controller = new RemoteController(current, memberId);
+            Object.assign(controller, msg.state);
+            onStarted?.(controller);
+          } else { controller.socket = current; Object.assign(controller, msg.state); controller.emit('turnChanged', {}); }
+          break;
+        case 'gameEvent': controller?.applyServerMessage(msg); break;
+      }
+    });
+    current.addEventListener('close', () => {
+      if (current !== socket || closedIntentionally) return;
+      if (seat?.token) retry = setTimeout(connect, 1000);
+      else onError?.('Connexion perdue. Vérifiez votre réseau et réessayez.');
+    });
+    current.addEventListener('error', () => { /* close drives reconnection */ });
+  };
+  const send = message => {
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+    else pending = message;
+  };
+  connect();
   return {
-    socket,
-    create(name) {
-      const rgToken = getIncomingPlatformToken();
-      const send = () => socket.send(JSON.stringify({ type: 'create', name, ...(rgToken ? { rgToken } : {}) }));
-      if (socket.readyState === WebSocket.OPEN) send();
-      else socket.addEventListener('open', send, { once: true });
-    },
-    join(code, name) {
-      const rgToken = getIncomingPlatformToken();
-      const send = () => socket.send(JSON.stringify({ type: 'join', code, name, ...(rgToken ? { rgToken } : {}) }));
-      if (socket.readyState === WebSocket.OPEN) send();
-      else socket.addEventListener('open', send, { once: true });
-    },
-    startGame() {
-      socket.send(JSON.stringify({ type: 'startGame' }));
-    },
+    get socket() { return socket; }, get session() { return seat; },
+    create(name) { send({ type: 'create', name, rgToken: getIncomingPlatformToken() }); },
+    join(code, name) { send({ type: 'join', code, name, rgToken: getIncomingPlatformToken() }); },
+    resume(session) { seat = session; saveLobbySession(session); if (socket?.readyState === WebSocket.OPEN) send({ type: 'resume', code: seat.code, token: seat.token }); },
+    startGame() { send({ type: 'startGame' }); },
     close() {
-      closedIntentionally = true;
-      socket.close();
+      closedIntentionally = true; clearTimeout(retry);
+      if (socket?.readyState === WebSocket.OPEN) send({ type: 'leave' });
+      socket?.close(); seat = null; saveLobbySession(null);
     },
   };
 }

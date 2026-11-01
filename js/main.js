@@ -6,7 +6,8 @@
 import { presentRoll, presentBank, presentBust, resetPresentation, presentFullHand, clearFullHand } from './presentation.js';
 import { attachBots } from './bots.js';
 import { GameController } from './game.js';
-import { openLobby } from './net.js';
+import { openLobby, getLobbySession } from './net.js';
+import { connectPlatform } from './platformConnector.js';
 import * as UI from './ui.js';
 import { setSoundEnabled, isSoundEnabled } from './sound.js';
 import { detectCombinations } from './engine.js';
@@ -135,6 +136,7 @@ const onlineEl = {
   waitNote: document.getElementById('online-wait-note'),
 };
 
+let platformSession = null;
 let lobby = null; // objet retourné par openLobby()
 let onlineMode = null; // 'create' | 'join'
 let isOnlineGame = false;
@@ -190,7 +192,8 @@ onlineEl.submit.addEventListener('click', () => {
     },
   });
 
-  if (onlineMode === 'create') lobby.create(name);
+  if (platformSession) { lobby.resume(platformSession); platformSession = null; }
+  else if (onlineMode === 'create') lobby.create(name);
   else lobby.join(onlineEl.codeInput.value, name);
 });
 
@@ -601,3 +604,10 @@ showScreen('screen-menu');
     }
   }
 }
+
+connectPlatform({ game: '10000', session: () => lobby?.session || getLobbySession(), adopt: async session => {
+  if (!session.token) throw new Error('Session invalide.');
+  lobby?.close(); platformSession = session; openOnlineScreen('join'); onlineEl.submit.click();
+} });
+const resumable = getLobbySession();
+if (resumable?.token && !lobby) { platformSession = resumable; openOnlineScreen('join'); onlineEl.submit.click(); }
