@@ -261,7 +261,13 @@ export class RoomManager {
       return room;
     };
     return {
-      inspect: c => { const r = lookup(c); return { code: r.code, instance: r.instance, capacity: MAX_PLAYERS, count: r.members.length, status: r.started ? 'started' : 'open', ownerUid: r.members.find(m => m.token === c.proof.token)?.platformUserId }; },
+      inspect: c => {
+        const room = lookup(c);
+        const member = room.members.find(m => m.token === c.proof.token);
+        return { code: room.code, instance: room.instance, capacity: MAX_PLAYERS, count: room.members.length,
+          status: room.started ? 'started' : 'open', ownerUid: member.platformUserId,
+          isHost: room.members[0] === member && member.connected && member.ws.readyState === 1 };
+      },
       admit: c => {
         const room = lookup(c);
         if (room.instance !== c.instance) throw new Error('Salon remplacé.');
