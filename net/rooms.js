@@ -64,7 +64,7 @@ class Room {
 
   addMember(ws, name, platformUserId = null) {
     const id = this.nextId++;
-    const member = { id, ws, name: (name || `Joueur ${id + 1}`).slice(0, 14), connected: true, platformUserId, token: randomBytes(24).toString('base64url') };
+    const member = { id, ws, name: (typeof name === 'string' && name.trim() ? name.trim() : `Joueur ${id + 1}`).slice(0, platformUserId ? 80 : 24), connected: true, platformUserId, token: randomBytes(24).toString('base64url') };
     this.members.push(member);
     ws.roomCode = this.code;
     ws.memberId = id;
@@ -90,6 +90,14 @@ class Room {
 
   start() {
     if (this.started || this.members.length < 2) return;
+    // Lobby departures can leave gaps in the stable seat IDs. The engine uses
+    // array indices: synchronize every client before starting, without changing
+    // their secret token or creating a second seat.
+    this.members.forEach((member, index) => {
+      member.id = index; member.ws.memberId = index;
+      if (member.connected && member.ws.readyState === 1) member.ws.send(JSON.stringify({ type: 'joined', code: this.code, memberId: index, token: member.token }));
+    });
+    this.nextId = this.members.length;
     this.started = true;
     const names = this.members.map((m) => m.name);
     this.controller = new GameController(names);
@@ -208,6 +216,7 @@ export class RoomManager {
   action(ws, msg) {
     const room = this.rooms.get(ws.roomCode);
     if (!room || ws.memberId == null) return;
+    if (!room.members.some(member => member.ws === ws && member.connected && member.id === ws.memberId)) return;
     room.handleAction(ws.memberId, msg);
   }
 
@@ -253,7 +262,7 @@ export class RoomManager {
     if(!room||room.instance!==instance)return null;
     const c=room.controller;
     return {code:room.code,started:room.started,
-      players:room.members.map(m=>({id:m.id,name:m.name,connected:m.connected})),
+      players:room.members.map(m=>({id:m.id,user_id:m.platformUserId,username:m.name,name:m.name,is_guest:!m.platformUserId,connected:m.connected})),
       board:c?{players:c.players.map(p=>({name:p.name,score:p.score})),currentPlayerIndex:c.currentPlayerIndex,
         turnScore:c.turnScore,tableDice:c.tableDice,committedDice:c.committedDice,isBust:c.isBust,gameOver:c.gameOver}:null};
   }

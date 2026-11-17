@@ -15,7 +15,7 @@ try {
     server.stdout.on('data', () => { clearTimeout(timer); resolve(); });
     server.on('exit', code => { clearTimeout(timer); reject(new Error(`Local server exited: ${code}`)); });
   });
-  browser = await chromium.launch(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {});
+  browser = await chromium.launch(process.env.BROWSER_EXECUTABLE_PATH ? { executablePath: process.env.BROWSER_EXECUTABLE_PATH, args: ['--no-sandbox'] } : process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {});
   await mkdir(new URL('../artifacts/', import.meta.url), { recursive: true });
   const errors = [];
   for (const [width, height] of [[320,568],[375,667],[390,844],[412,915],[844,390],[1440,900]]) {
