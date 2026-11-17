@@ -1,3 +1,4 @@
+import { nodeObserver } from './admin-observer/server.mjs';
 /**
  * server.js — Serveur statique + salons multijoueur en temps réel.
  *
@@ -47,6 +48,7 @@ const MIME = {
 
 const server = createServer(async (req, res) => {
   try {
+    if(await nodeObserver(req,res,'10000',(code,instance)=>rooms.adminSnapshot(code,instance)))return;
     if (await nodeConnector(req, res, '10000', rooms.platformConnector())) return;
     const url = new URL(req.url, `http://${req.headers.host}`);
     let path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '');

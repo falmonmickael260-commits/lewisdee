@@ -248,6 +248,15 @@ export class RoomManager {
     if (room.isEmpty()) this.rooms.delete(room.code);
   }
 
+  adminSnapshot(code,instance) {
+    const room=this.rooms.get(code);
+    if(!room||room.instance!==instance)return null;
+    const c=room.controller;
+    return {code:room.code,started:room.started,
+      players:room.members.map(m=>({id:m.id,name:m.name,connected:m.connected})),
+      board:c?{players:c.players.map(p=>({name:p.name,score:p.score})),currentPlayerIndex:c.currentPlayerIndex,
+        turnScore:c.turnScore,tableDice:c.tableDice,committedDice:c.committedDice,isBust:c.isBust,gameOver:c.gameOver}:null};
+  }
   platformConnector() {
     const lookup = c => {
       const room = this.rooms.get(c.room);
