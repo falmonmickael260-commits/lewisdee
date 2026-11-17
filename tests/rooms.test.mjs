@@ -97,3 +97,13 @@ test('full-hand celebration uses the same official flag for both clients and exc
   assert.equal(overshoot.payload.isBust, true);
   assert.equal(overshoot.payload.isHotDiceOpportunity, false);
 });
+
+test('admin observer reads dice without a seat, credentials or state mutations',()=>{
+  const {manager,alice,room}=setup();manager.start(alice);
+  const members=room.members.length,before=JSON.stringify(room.controller.players);
+  const view=manager.adminSnapshot(room.code,room.instance);
+  assert.equal(view.players.length,members);assert.equal(room.members.length,members);
+  assert.equal(JSON.stringify(room.controller.players),before);
+  for(const member of room.members)assert.equal(JSON.stringify(view).includes(member.token),false);
+  assert.equal(manager.adminSnapshot(room.code,'replaced'),null);
+});
