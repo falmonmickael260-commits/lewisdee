@@ -107,3 +107,33 @@ test('admin observer reads dice without a seat, credentials or state mutations',
   for(const member of room.members)assert.equal(JSON.stringify(view).includes(member.token),false);
   assert.equal(manager.adminSnapshot(room.code,'replaced'),null);
 });
+
+test('lobby departures cannot assign turns to a missing seat', () => {
+  const { manager,alice,bob,room }=setup();
+  manager.leave(bob);
+  const charlie=client();manager.join(charlie,room.code,'Charlie');
+  assert.equal(charlie.memberId,2,'pre-game seat IDs can contain gaps');
+  manager.start(alice);
+  assert.equal(charlie.memberId,1,'all clients receive the engine seat before starting');
+  assert.equal(charlie.messages.filter(m=>m.type==='joined').at(-1).memberId,1);
+  room.controller.currentPlayerIndex=1;
+  const before=alice.messages.length;manager.action(charlie,{action:'roll'});
+  assert.ok(alice.messages.length>before,'remaining player can act on their turn');
+});
+test('host departure before start preserves new host control and turns',()=>{
+  const { manager,alice,bob,room }=setup();manager.leave(alice);
+  const charlie=client();manager.join(charlie,room.code,'Charlie');manager.start(bob);
+  assert.equal(room.started,true);assert.equal(bob.memberId,0);assert.equal(charlie.memberId,1);
+  const before=bob.messages.length;manager.action(bob,{action:'roll'});assert.ok(bob.messages.length>before);
+});
+test('a replaced socket cannot act on the resumed seat',()=>{
+  const {manager,alice,room}=setup();manager.start(alice);
+  const replacement=client();manager.resume(replacement,room.code,room.members[0].token);
+  const before=replacement.messages.length;manager.action(alice,{action:'roll'});assert.equal(replacement.messages.length,before);
+});
+test('admin snapshot contains verified profile identities and no seat tokens',()=>{
+  const manager=new RoomManager(),ws=client();const room=manager.create(ws,'PseudoLongDeLaPlateforme','11111111-1111-4111-8111-111111111111');
+  const snapshot=manager.adminSnapshot(room.code,room.instance);
+  assert.equal(snapshot.players[0].username,'PseudoLongDeLaPlateforme');assert.equal(snapshot.players[0].user_id,'11111111-1111-4111-8111-111111111111');
+  assert.equal(JSON.stringify(snapshot).includes(room.members[0].token),false);
+});

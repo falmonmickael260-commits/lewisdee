@@ -50,7 +50,17 @@ const server = createServer(async (req, res) => {
   try {
     if(await nodeObserver(req,res,'10000',(code,instance)=>rooms.adminSnapshot(code,instance)))return;
     if (await nodeConnector(req, res, '10000', rooms.platformConnector())) return;
-    const url = new URL(req.url, `http://${req.headers.host}`);
+    const url = new URL(req.url, 'http://local');
+    if (url.pathname === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ status: 'ok', game: '10000', uptimeSeconds: Math.floor(process.uptime()),
+        rooms: rooms.rooms.size, connectedPlayers: [...rooms.rooms.values()].reduce((sum, room) => sum + room.members.filter(m => m.connected && m.ws.readyState === 1).length, 0) }));
+      return;
+    }
+    const decoded = decodeURIComponent(url.pathname);
+    if (decoded.split('/').some(segment => segment.startsWith('.')) || !/^\/(?:$|index\.html$|(?:js|css|assets|sounds|images|fonts)\/)/.test(decoded)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Ressource introuvable.'); return;
+    }
     let path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '');
     if (path === '/' || path === '') path = '/index.html';
 
@@ -92,9 +102,11 @@ const server = createServer(async (req, res) => {
 // ---------------------------------------------------------------------------
 
 const rooms = new RoomManager();
-const wss = new WebSocketServer({ server, path: '/ws' });
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024 });
 
 wss.on('connection', (ws) => {
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
   ws.on('message', (raw) => {
     let msg;
     try {
@@ -102,6 +114,8 @@ wss.on('connection', (ws) => {
     } catch {
       return;
     }
+    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return;
+    try {
     switch (msg.type) {
       case 'resume':
         rooms.resume(ws, msg.code, msg.token);
@@ -109,12 +123,16 @@ wss.on('connection', (ws) => {
       case 'leave':
         rooms.leave(ws);
         break;
-      case 'create':
-        rooms.create(ws, msg.name, verifyPlatformToken(msg.rgToken)?.uid ?? null);
+      case 'create': {
+        const identity = verifyPlatformToken(msg.rgToken);
+        rooms.create(ws, identity?.username || msg.name, identity?.uid ?? null);
         break;
-      case 'join':
-        rooms.join(ws, msg.code, msg.name, verifyPlatformToken(msg.rgToken)?.uid ?? null);
+      }
+      case 'join': {
+        const identity = verifyPlatformToken(msg.rgToken);
+        rooms.join(ws, msg.code, identity?.username || msg.name, identity?.uid ?? null);
         break;
+      }
       case 'startGame':
         rooms.start(ws);
         break;
@@ -124,10 +142,23 @@ wss.on('connection', (ws) => {
       default:
         break;
     }
+    } catch {
+      if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'error', message: 'Cette action ne peut pas être effectuée. Réessayez.' }));
+      console.error('10000: commande refusée sans interruption du serveur.');
+    }
   });
   ws.on('close', () => rooms.handleClose(ws));
   ws.on('error', () => rooms.handleClose(ws));
 });
+
+const heartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.isAlive === false) { ws.terminate(); continue; }
+    ws.isAlive = false; ws.ping();
+  }
+}, 30000);
+heartbeat.unref?.();
+wss.on('close', () => clearInterval(heartbeat));
 
 server.listen(PORT, () => {
   console.log(`10 000 — serveur prêt sur le port ${PORT} (HTTP + WebSocket /ws)`);
